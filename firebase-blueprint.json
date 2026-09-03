@@ -1,0 +1,152 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "Usuário ou cliente do sistema de barbearia",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "phone": { "type": "string" },
+        "role": { "type": "string", "enum": ["ADMIN", "CLIENT"] },
+        "avatarUrl": { "type": "string" },
+        "subscriptionId": { "type": "string" },
+        "subscriptionStartDate": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "name", "email", "role"]
+    },
+    "BarberService": {
+      "title": "BarberService",
+      "description": "Serviço oferecido pela barbearia",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "category": { "type": "string" },
+        "price": { "type": "number" },
+        "durationMinutes": { "type": "number" },
+        "description": { "type": "string" },
+        "isActive": { "type": "boolean" }
+      },
+      "required": ["id", "name", "price", "durationMinutes", "isActive"]
+    },
+    "SubscriptionPlan": {
+      "title": "SubscriptionPlan",
+      "description": "Plano de assinatura recorrente da barbearia",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "monthlyPrice": { "type": "number" },
+        "description": { "type": "string" },
+        "includedServicesDescription": { "type": "string" },
+        "maxBookingsPerMonth": { "type": "number" },
+        "discountPercentageOnOthers": { "type": "number" },
+        "popular": { "type": "boolean" },
+        "infinitePayUrl": { "type": "string" },
+        "isActive": { "type": "boolean" }
+      },
+      "required": ["id", "name", "monthlyPrice", "isActive"]
+    },
+    "Booking": {
+      "title": "Booking",
+      "description": "Agendamento de serviço realizado por cliente",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "clientId": { "type": "string" },
+        "clientName": { "type": "string" },
+        "clientPhone": { "type": "string" },
+        "clientEmail": { "type": "string" },
+        "serviceId": { "type": "string" },
+        "serviceName": { "type": "string" },
+        "servicePrice": { "type": "number" },
+        "durationMinutes": { "type": "number" },
+        "barberName": { "type": "string" },
+        "date": { "type": "string" },
+        "time": { "type": "string" },
+        "status": { "type": "string", "enum": ["AGENDADO", "EXECUTADO", "CANCELADO", "NAO_COMPARECEU"] },
+        "paymentMethod": { "type": "string" },
+        "isPaid": { "type": "boolean" },
+        "cancelReason": { "type": "string" },
+        "cancelledAt": { "type": "string" },
+        "notes": { "type": "string" },
+        "recurrenceId": { "type": "string" },
+        "recurrenceType": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "reminderSent": { "type": "boolean" }
+      },
+      "required": ["id", "clientId", "clientName", "serviceId", "serviceName", "date", "time", "status"]
+    },
+    "AbsenceDay": {
+      "title": "AbsenceDay",
+      "description": "Bloqueio de data ou folga do barbeiro",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "date": { "type": "string" },
+        "reason": { "type": "string" },
+        "barberName": { "type": "string" }
+      },
+      "required": ["id", "date", "reason"]
+    },
+    "CashTransaction": {
+      "title": "CashTransaction",
+      "description": "Transação financeira de entrada ou saída no caixa",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "bookingId": { "type": "string" },
+        "type": { "type": "string", "enum": ["ENTRADA", "SAIDA"] },
+        "description": { "type": "string" },
+        "amount": { "type": "number" },
+        "paymentMethod": { "type": "string" },
+        "category": { "type": "string" },
+        "date": { "type": "string" },
+        "createdByName": { "type": "string" }
+      },
+      "required": ["id", "type", "description", "amount", "paymentMethod", "date"]
+    },
+    "Setting": {
+      "title": "Setting",
+      "description": "Configurações gerais do sistema (horários de funcionamento, InfinitePay)",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" }
+      }
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/User" },
+      "description": "Coleção de perfis de usuários e clientes"
+    },
+    "/services/{serviceId}": {
+      "schema": { "$ref": "#/entities/BarberService" },
+      "description": "Catálogo de serviços da barbearia"
+    },
+    "/plans/{planId}": {
+      "schema": { "$ref": "#/entities/SubscriptionPlan" },
+      "description": "Planos de assinatura mensal do clube"
+    },
+    "/bookings/{bookingId}": {
+      "schema": { "$ref": "#/entities/Booking" },
+      "description": "Agendamentos de cortes e barbas"
+    },
+    "/absences/{absenceId}": {
+      "schema": { "$ref": "#/entities/AbsenceDay" },
+      "description": "Folgas, feriados e bloqueios de agenda"
+    },
+    "/transactions/{transactionId}": {
+      "schema": { "$ref": "#/entities/CashTransaction" },
+      "description": "Fluxo de caixa (entradas e saídas)"
+    },
+    "/settings/{settingId}": {
+      "schema": { "$ref": "#/entities/Setting" },
+      "description": "Configurações de disponibilidade e integração de pagamentos"
+    }
+  }
+}

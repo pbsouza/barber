@@ -24,6 +24,17 @@ import {
   INITIAL_TRANSACTIONS,
   INITIAL_AVAILABILITY_CONFIG,
 } from '../mockData';
+import {
+  collection,
+  doc,
+  setDoc,
+  updateDoc,
+  deleteDoc,
+  onSnapshot,
+  writeBatch,
+  getDocs,
+} from 'firebase/firestore';
+import { db, testFirestoreConnection } from '../firebase';
 
 interface PendingBookingData {
   serviceId: string;
@@ -46,45 +57,49 @@ interface AppContextType {
   closeAuthModal: () => void;
   authModalMode: 'LOGIN' | 'REGISTER';
 
+  // Firebase status & data cleaning
+  isFirebaseConnected: boolean;
+  clearAllTestData: () => Promise<void>;
+
   // Services
   services: BarberService[];
-  addService: (service: Omit<BarberService, 'id'>) => void;
-  updateService: (id: string, service: Partial<BarberService>) => void;
-  deleteService: (id: string) => void;
+  addService: (service: Omit<BarberService, 'id'>) => Promise<void>;
+  updateService: (id: string, service: Partial<BarberService>) => Promise<void>;
+  deleteService: (id: string) => Promise<void>;
 
   // Subscription Plans
   plans: SubscriptionPlan[];
-  addPlan: (plan: Omit<SubscriptionPlan, 'id'>) => void;
-  updatePlan: (id: string, plan: Partial<SubscriptionPlan>) => void;
-  deletePlan: (id: string) => void;
-  subscribeUserToPlan: (userId: string, planId: string) => void;
-  cancelUserSubscription: (userId: string) => void;
+  addPlan: (plan: Omit<SubscriptionPlan, 'id'>) => Promise<void>;
+  updatePlan: (id: string, plan: Partial<SubscriptionPlan>) => Promise<void>;
+  deletePlan: (id: string) => Promise<void>;
+  subscribeUserToPlan: (userId: string, planId: string) => Promise<void>;
+  cancelUserSubscription: (userId: string) => Promise<void>;
   isSubscriptionModalOpen: boolean;
   openSubscriptionModal: () => void;
   closeSubscriptionModal: () => void;
 
   // InfinitePay Digital Wallet Config
   infinitePayConfig: InfinitePayConfig;
-  updateInfinitePayConfig: (config: Partial<InfinitePayConfig>) => void;
+  updateInfinitePayConfig: (config: Partial<InfinitePayConfig>) => Promise<void>;
 
   // Bookings
   bookings: Booking[];
   pendingBooking: PendingBookingData | null;
   setPendingBooking: (data: PendingBookingData | null) => void;
-  createBookingBatch: (bookingData: PendingBookingData, client: User) => string[];
-  updateBookingStatus: (bookingId: string, status: BookingStatus, paymentMethod?: PaymentMethod, cancelReason?: string) => void;
-  markReminderSent: (bookingId: string) => void;
+  createBookingBatch: (bookingData: PendingBookingData, client: User) => Promise<string[]>;
+  updateBookingStatus: (bookingId: string, status: BookingStatus, paymentMethod?: PaymentMethod, cancelReason?: string) => Promise<void>;
+  markReminderSent: (bookingId: string) => Promise<void>;
 
   // Availability & Absence
   availabilityConfig: BarberAvailabilityConfig;
-  updateAvailabilityConfig: (config: Partial<BarberAvailabilityConfig>) => void;
+  updateAvailabilityConfig: (config: Partial<BarberAvailabilityConfig>) => Promise<void>;
   absenceDays: AbsenceDay[];
-  addAbsenceDay: (date: string, reason: string) => void;
-  deleteAbsenceDay: (id: string) => void;
+  addAbsenceDay: (date: string, reason: string) => Promise<void>;
+  deleteAbsenceDay: (id: string) => Promise<void>;
 
   // Cash Control
   transactions: CashTransaction[];
-  addTransaction: (trans: Omit<CashTransaction, 'id' | 'date'>) => void;
+  addTransaction: (trans: Omit<CashTransaction, 'id' | 'date'>) => Promise<void>;
 
   // Forecast & Reports
   getRevenueForecasts: () => RevenueForecast[];
@@ -103,9 +118,21 @@ interface AppContextType {
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 const SESSION_MAX_DURATION = 300; // 5 minutes in seconds
+const CLEAN_STORAGE_KEY = 'barber_clean_firebase_v3';
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  // Load state from localStorage or fallback to initial data
+  // Purge any old test mock data from browser localStorage once upon boot
+  if (typeof window !== 'undefined' && localStorage.getItem(CLEAN_STORAGE_KEY) !== 'true') {
+    localStorage.removeItem('barber_bookings');
+    localStorage.removeItem('barber_transactions');
+    localStorage.removeItem('barber_absence_days');
+    localStorage.removeItem('barber_users');
+    localStorage.setItem(CLEAN_STORAGE_KEY, 'true');
+  }
+
+  const [isFirebaseConnected, setIsFirebaseConnected] = useState<boolean>(true);
+
+  // Load state with clean initial values
   const [currentUser, setCurrentUser] = useState<User | null>(() => {
     try {
       const saved = localStorage.getItem('barber_current_user');
@@ -120,7 +147,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const saved = localStorage.getItem('barber_users');
       if (!saved) return INITIAL_USERS;
       const parsed = JSON.parse(saved);
-      return Array.isArray(parsed) && parsed.length > 0 ? parsed : INITIAL_USERS;
+      // Filter out dummy clients if any remained
+      const valid = Array.isArray(parsed)
+        ? parsed.filter((u) => u.email === 'belchior87@gmail.com' || u.role === 'ADMIN')
+        : INITIAL_USERS;
+      return valid.length > 0 ? valid : INITIAL_USERS;
     } catch {
       return INITIAL_USERS;
     }
@@ -225,7 +256,131 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [activeAdminReminderBooking, setActiveAdminReminderBooking] = useState<Booking | null>(null);
   const [dismissedReminders, setDismissedReminders] = useState<string[]>([]);
 
-  // Sync state to localStorage
+  // ----------------------------------------------------
+  // FIREBASE FIRESTORE REAL-TIME SYNCHRONIZATION
+  // ----------------------------------------------------
+  useEffect(() => {
+    testFirestoreConnection();
+
+    // 1. Sync Services
+    const unsubServices = onSnapshot(
+      collection(db, 'services'),
+      (snapshot) => {
+        if (snapshot.empty) {
+          // Seed default real services if collection is empty
+          INITIAL_SERVICES.forEach((s) => {
+            setDoc(doc(db, 'services', s.id), s).catch(console.error);
+          });
+          setServices(INITIAL_SERVICES);
+        } else {
+          const list = snapshot.docs.map((d) => d.data() as BarberService);
+          setServices(list);
+        }
+        setIsFirebaseConnected(true);
+      },
+      (err) => {
+        console.warn('[Firebase] Erro ao sincronizar serviços:', err.message);
+        setIsFirebaseConnected(false);
+      }
+    );
+
+    // 2. Sync Plans
+    const unsubPlans = onSnapshot(
+      collection(db, 'plans'),
+      (snapshot) => {
+        if (snapshot.empty) {
+          INITIAL_SUBSCRIPTION_PLANS.forEach((p) => {
+            setDoc(doc(db, 'plans', p.id), p).catch(console.error);
+          });
+          setPlans(INITIAL_SUBSCRIPTION_PLANS);
+        } else {
+          const list = snapshot.docs.map((d) => d.data() as SubscriptionPlan);
+          setPlans(list);
+        }
+      },
+      (err) => console.warn('[Firebase] Erro ao sincronizar planos:', err.message)
+    );
+
+    // 3. Sync Settings (Availability & InfinitePay)
+    const unsubAvailability = onSnapshot(doc(db, 'settings', 'availability'), (snap) => {
+      if (snap.exists()) {
+        setAvailabilityConfig(snap.data() as BarberAvailabilityConfig);
+      } else {
+        setDoc(doc(db, 'settings', 'availability'), INITIAL_AVAILABILITY_CONFIG).catch(console.error);
+      }
+    });
+
+    const unsubInfinitePay = onSnapshot(doc(db, 'settings', 'infinitepay'), (snap) => {
+      if (snap.exists()) {
+        setInfinitePayConfig(snap.data() as InfinitePayConfig);
+      } else {
+        setDoc(doc(db, 'settings', 'infinitepay'), INITIAL_INFINITEPAY_CONFIG).catch(console.error);
+      }
+    });
+
+    // 4. Sync Bookings
+    const unsubBookings = onSnapshot(
+      collection(db, 'bookings'),
+      (snapshot) => {
+        const list = snapshot.docs.map((d) => d.data() as Booking);
+        // Sort descending by creation/date
+        list.sort((a, b) => new Date(`${b.date}T${b.time}`).getTime() - new Date(`${a.date}T${a.time}`).getTime());
+        setBookings(list);
+      },
+      (err) => console.warn('[Firebase] Erro ao sincronizar agendamentos:', err.message)
+    );
+
+    // 5. Sync Absences
+    const unsubAbsences = onSnapshot(
+      collection(db, 'absences'),
+      (snapshot) => {
+        const list = snapshot.docs.map((d) => d.data() as AbsenceDay);
+        setAbsenceDays(list);
+      },
+      (err) => console.warn('[Firebase] Erro ao sincronizar ausências:', err.message)
+    );
+
+    // 6. Sync Transactions
+    const unsubTransactions = onSnapshot(
+      collection(db, 'transactions'),
+      (snapshot) => {
+        const list = snapshot.docs.map((d) => d.data() as CashTransaction);
+        list.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+        setTransactions(list);
+      },
+      (err) => console.warn('[Firebase] Erro ao sincronizar transações:', err.message)
+    );
+
+    // 7. Sync Users
+    const unsubUsers = onSnapshot(
+      collection(db, 'users'),
+      (snapshot) => {
+        if (snapshot.empty) {
+          INITIAL_USERS.forEach((u) => {
+            setDoc(doc(db, 'users', u.id), u).catch(console.error);
+          });
+          setUsers(INITIAL_USERS);
+        } else {
+          const list = snapshot.docs.map((d) => d.data() as User);
+          setUsers(list);
+        }
+      },
+      (err) => console.warn('[Firebase] Erro ao sincronizar usuários:', err.message)
+    );
+
+    return () => {
+      unsubServices();
+      unsubPlans();
+      unsubAvailability();
+      unsubInfinitePay();
+      unsubBookings();
+      unsubAbsences();
+      unsubTransactions();
+      unsubUsers();
+    };
+  }, []);
+
+  // Sync state to localStorage for offline cache
   useEffect(() => {
     if (currentUser) {
       localStorage.setItem('barber_current_user', JSON.stringify(currentUser));
@@ -288,7 +443,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   useEffect(() => {
     if (!currentUser) return;
 
-    // Reset countdown on login or user presence
     setSessionRemainingSeconds(SESSION_MAX_DURATION);
 
     const interval = setInterval(() => {
@@ -303,7 +457,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       });
     }, 1000);
 
-    // Reset on user activity
     const handleActivity = () => {
       setSessionRemainingSeconds((prev) => (prev > 0 ? SESSION_MAX_DURATION : 0));
     };
@@ -327,12 +480,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return;
     }
 
-    // Find next upcoming scheduled booking for today or next day that hasn't been reminded yet
-    const todayStr = '2026-09-02';
-    const upcoming = bookings.find(
+    const todayStr = new Date().toISOString().split('T')[0];
+    const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+
+    const upcoming = (bookings || []).find(
       (b) =>
         b.status === 'AGENDADO' &&
-        (b.date === todayStr || b.date === '2026-09-03') &&
+        (b.date === todayStr || b.date === tomorrow) &&
         !b.reminderSent &&
         !dismissedReminders.includes(b.id)
     );
@@ -357,14 +511,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const normalizedEmail = email.trim().toLowerCase();
       let matchedUser = users.find((u) => u.email.toLowerCase() === normalizedEmail);
 
-      // Auto-detect admin if email matches admin pattern or explicit admin role
       const isAdminEmail =
         normalizedEmail.includes('admin') ||
         normalizedEmail === 'belchior87@gmail.com' ||
         role === 'ADMIN';
 
       if (!matchedUser) {
-        // Create user on the fly if new
         const newUser: User = {
           id: `user-${Date.now()}`,
           name: name || (isAdminEmail ? 'Belchior (Administrador)' : 'Novo Cliente'),
@@ -375,16 +527,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         };
         setUsers((prev) => [...prev, newUser]);
         matchedUser = newUser;
+        setDoc(doc(db, 'users', newUser.id), newUser).catch(console.error);
       } else if (isAdminEmail && matchedUser.role !== 'ADMIN') {
         matchedUser = { ...matchedUser, role: 'ADMIN' };
         setUsers((prev) => prev.map((u) => (u.id === matchedUser!.id ? matchedUser! : u)));
+        setDoc(doc(db, 'users', matchedUser.id), matchedUser, { merge: true }).catch(console.error);
       }
 
       setCurrentUser(matchedUser);
       renewSession();
       setIsAuthModalOpen(false);
 
-      // Auto route: if admin, open Admin Panel; if client and has pending booking, stay on booking flow to confirm
       if (matchedUser.role === 'ADMIN') {
         setActiveView('ADMIN_PANEL');
       } else {
@@ -411,61 +564,94 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const closeSubscriptionModal = useCallback(() => setIsSubscriptionModalOpen(false), []);
 
   // Services CRUD
-  const addService = useCallback((serviceData: Omit<BarberService, 'id'>) => {
+  const addService = useCallback(async (serviceData: Omit<BarberService, 'id'>) => {
     const newService: BarberService = {
       ...serviceData,
       id: `serv-${Date.now()}`,
     };
     setServices((prev) => [...prev, newService]);
+    try {
+      await setDoc(doc(db, 'services', newService.id), newService);
+    } catch (err) {
+      console.error('[Firebase] Erro ao salvar serviço:', err);
+    }
   }, []);
 
-  const updateService = useCallback((id: string, updatedFields: Partial<BarberService>) => {
+  const updateService = useCallback(async (id: string, updatedFields: Partial<BarberService>) => {
     setServices((prev) => prev.map((s) => (s.id === id ? { ...s, ...updatedFields } : s)));
+    try {
+      await updateDoc(doc(db, 'services', id), updatedFields);
+    } catch (err) {
+      console.error('[Firebase] Erro ao atualizar serviço:', err);
+    }
   }, []);
 
-  const deleteService = useCallback((id: string) => {
+  const deleteService = useCallback(async (id: string) => {
     setServices((prev) => prev.filter((s) => s.id !== id));
+    try {
+      await deleteDoc(doc(db, 'services', id));
+    } catch (err) {
+      console.error('[Firebase] Erro ao excluir serviço:', err);
+    }
   }, []);
 
-  // Subscription plans CRUD & InfinitePay
-  const addPlan = useCallback((planData: Omit<SubscriptionPlan, 'id'>) => {
+  // Subscription plans CRUD
+  const addPlan = useCallback(async (planData: Omit<SubscriptionPlan, 'id'>) => {
     const newPlan: SubscriptionPlan = {
       ...planData,
       id: `plan-${Date.now()}`,
       isActive: planData.isActive !== undefined ? planData.isActive : true,
     };
     setPlans((prev) => [...prev, newPlan]);
+    try {
+      await setDoc(doc(db, 'plans', newPlan.id), newPlan);
+    } catch (err) {
+      console.error('[Firebase] Erro ao salvar plano:', err);
+    }
   }, []);
 
-  const updatePlan = useCallback((id: string, updatedFields: Partial<SubscriptionPlan>) => {
+  const updatePlan = useCallback(async (id: string, updatedFields: Partial<SubscriptionPlan>) => {
     setPlans((prev) => prev.map((p) => (p.id === id ? { ...p, ...updatedFields } : p)));
+    try {
+      await updateDoc(doc(db, 'plans', id), updatedFields);
+    } catch (err) {
+      console.error('[Firebase] Erro ao atualizar plano:', err);
+    }
   }, []);
 
-  const deletePlan = useCallback((id: string) => {
+  const deletePlan = useCallback(async (id: string) => {
     setPlans((prev) => prev.filter((p) => p.id !== id));
+    try {
+      await deleteDoc(doc(db, 'plans', id));
+    } catch (err) {
+      console.error('[Firebase] Erro ao deletar plano:', err);
+    }
   }, []);
 
-  const updateInfinitePayConfig = useCallback((config: Partial<InfinitePayConfig>) => {
+  const updateInfinitePayConfig = useCallback(async (config: Partial<InfinitePayConfig>) => {
     setInfinitePayConfig((prev) => ({ ...prev, ...config }));
+    try {
+      await setDoc(doc(db, 'settings', 'infinitepay'), config, { merge: true });
+    } catch (err) {
+      console.error('[Firebase] Erro ao salvar InfinitePay config:', err);
+    }
   }, []);
 
   // Subscription management
   const subscribeUserToPlan = useCallback(
-    (userId: string, planId: string) => {
+    async (userId: string, planId: string) => {
       const plan = plans.find((p) => p.id === planId);
       if (!plan) return;
 
+      const startDate = new Date().toISOString().split('T')[0];
+
       setUsers((prev) =>
-        prev.map((u) =>
-          u.id === userId
-            ? { ...u, subscriptionId: planId, subscriptionStartDate: new Date().toISOString().split('T')[0] }
-            : u
-        )
+        prev.map((u) => (u.id === userId ? { ...u, subscriptionId: planId, subscriptionStartDate: startDate } : u))
       );
 
       if (currentUser && currentUser.id === userId) {
         setCurrentUser((prev) =>
-          prev ? { ...prev, subscriptionId: planId, subscriptionStartDate: new Date().toISOString().split('T')[0] } : null
+          prev ? { ...prev, subscriptionId: planId, subscriptionStartDate: startDate } : null
         );
       }
 
@@ -481,12 +667,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         createdByName: 'Sistema Assinaturas',
       };
       setTransactions((prev) => [newTransaction, ...prev]);
+
+      try {
+        await updateDoc(doc(db, 'users', userId), {
+          subscriptionId: planId,
+          subscriptionStartDate: startDate,
+        });
+        await setDoc(doc(db, 'transactions', newTransaction.id), newTransaction);
+      } catch (err) {
+        console.error('[Firebase] Erro ao registrar assinatura:', err);
+      }
     },
     [currentUser, plans]
   );
 
   const cancelUserSubscription = useCallback(
-    (userId: string) => {
+    async (userId: string) => {
       setUsers((prev) =>
         prev.map((u) => (u.id === userId ? { ...u, subscriptionId: undefined, subscriptionStartDate: undefined } : u))
       );
@@ -495,13 +691,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           prev ? { ...prev, subscriptionId: undefined, subscriptionStartDate: undefined } : null
         );
       }
+      try {
+        await updateDoc(doc(db, 'users', userId), {
+          subscriptionId: null,
+          subscriptionStartDate: null,
+        });
+      } catch (err) {
+        console.error('[Firebase] Erro ao cancelar assinatura:', err);
+      }
     },
     [currentUser]
   );
 
   // Booking batch creation
   const createBookingBatch = useCallback(
-    (bookingData: PendingBookingData, client: User): string[] => {
+    async (bookingData: PendingBookingData, client: User): Promise<string[]> => {
       const selectedService = services.find((s) => s.id === bookingData.serviceId);
       if (!selectedService) return [];
 
@@ -539,14 +743,27 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       setBookings((prev) => [...newBookings, ...prev]);
       setPendingBooking(null);
+
+      // Persist to Firebase
+      try {
+        for (const b of newBookings) {
+          await setDoc(doc(db, 'bookings', b.id), b);
+        }
+      } catch (err) {
+        console.error('[Firebase] Erro ao gravar agendamentos no Firestore:', err);
+      }
+
       return createdIds;
     },
     [services]
   );
 
-  // Booking status update (e.g. Executed with payment, Cancelled with reason)
+  // Booking status update
   const updateBookingStatus = useCallback(
-    (bookingId: string, status: BookingStatus, paymentMethod: PaymentMethod = 'PIX', cancelReason?: string) => {
+    async (bookingId: string, status: BookingStatus, paymentMethod: PaymentMethod = 'PIX', cancelReason?: string) => {
+      let updatedBooking: Booking | null = null;
+      let transactionToSave: CashTransaction | null = null;
+
       setBookings((prev) =>
         prev.map((b) => {
           if (b.id !== bookingId) return b;
@@ -559,8 +776,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             cancelReason: status === 'CANCELADO' ? cancelReason : b.cancelReason,
             cancelledAt: status === 'CANCELADO' ? new Date().toISOString() : b.cancelledAt,
           };
+          updatedBooking = updated;
 
-          // If executed, automatically record cash entry if not already logged as subscription
           if (status === 'EXECUTADO' && b.servicePrice > 0 && b.paymentMethod !== 'ASSINATURA_CLUBE') {
             const trans: CashTransaction = {
               id: `trans-cash-${Date.now()}`,
@@ -573,18 +790,35 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               date: new Date().toISOString(),
               createdByName: 'Belchior Barber',
             };
+            transactionToSave = trans;
             setTransactions((t) => [trans, ...t]);
           }
 
           return updated;
         })
       );
+
+      try {
+        if (updatedBooking) {
+          await setDoc(doc(db, 'bookings', bookingId), updatedBooking, { merge: true });
+        }
+        if (transactionToSave) {
+          await setDoc(doc(db, 'transactions', (transactionToSave as CashTransaction).id), transactionToSave);
+        }
+      } catch (err) {
+        console.error('[Firebase] Erro ao atualizar agendamento:', err);
+      }
     },
     []
   );
 
-  const markReminderSent = useCallback((bookingId: string) => {
+  const markReminderSent = useCallback(async (bookingId: string) => {
     setBookings((prev) => prev.map((b) => (b.id === bookingId ? { ...b, reminderSent: true } : b)));
+    try {
+      await updateDoc(doc(db, 'bookings', bookingId), { reminderSent: true });
+    } catch (err) {
+      console.error('[Firebase] Erro ao atualizar lembrete:', err);
+    }
   }, []);
 
   // WhatsApp Preformatted Reminder Dispatcher
@@ -604,42 +838,111 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   );
 
   // Availability & Absence
-  const updateAvailabilityConfig = useCallback((config: Partial<BarberAvailabilityConfig>) => {
+  const updateAvailabilityConfig = useCallback(async (config: Partial<BarberAvailabilityConfig>) => {
     setAvailabilityConfig((prev) => ({ ...prev, ...config }));
+    try {
+      await setDoc(doc(db, 'settings', 'availability'), config, { merge: true });
+    } catch (err) {
+      console.error('[Firebase] Erro ao salvar disponibilidade:', err);
+    }
   }, []);
 
-  const addAbsenceDay = useCallback((date: string, reason: string) => {
+  const addAbsenceDay = useCallback(async (date: string, reason: string) => {
     const newAbsence: AbsenceDay = {
       id: `abs-${Date.now()}`,
       date,
       reason,
     };
     setAbsenceDays((prev) => [...prev, newAbsence]);
+    try {
+      await setDoc(doc(db, 'absences', newAbsence.id), newAbsence);
+    } catch (err) {
+      console.error('[Firebase] Erro ao salvar ausência:', err);
+    }
   }, []);
 
-  const deleteAbsenceDay = useCallback((id: string) => {
+  const deleteAbsenceDay = useCallback(async (id: string) => {
     setAbsenceDays((prev) => prev.filter((a) => a.id !== id));
+    try {
+      await deleteDoc(doc(db, 'absences', id));
+    } catch (err) {
+      console.error('[Firebase] Erro ao deletar ausência:', err);
+    }
   }, []);
 
   // Transactions
-  const addTransaction = useCallback((transData: Omit<CashTransaction, 'id' | 'date'>) => {
+  const addTransaction = useCallback(async (transData: Omit<CashTransaction, 'id' | 'date'>) => {
     const newTrans: CashTransaction = {
       ...transData,
       id: `trans-${Date.now()}`,
       date: new Date().toISOString(),
     };
     setTransactions((prev) => [newTrans, ...prev]);
+    try {
+      await setDoc(doc(db, 'transactions', newTrans.id), newTrans);
+    } catch (err) {
+      console.error('[Firebase] Erro ao registrar transação:', err);
+    }
+  }, []);
+
+  // Clear all test data utility
+  const clearAllTestData = useCallback(async () => {
+    // 1. Clear state
+    setBookings([]);
+    setTransactions([]);
+    setAbsenceDays([]);
+    const cleanUsers = [
+      {
+        id: 'user-admin',
+        name: 'Belchior (Administrador)',
+        email: 'belchior87@gmail.com',
+        phone: '(11) 98765-4321',
+        role: 'ADMIN' as const,
+        avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
+        createdAt: new Date().toISOString(),
+      },
+    ];
+    setUsers(cleanUsers);
+
+    // 2. Clear localStorage
+    localStorage.removeItem('barber_bookings');
+    localStorage.removeItem('barber_transactions');
+    localStorage.removeItem('barber_absence_days');
+    localStorage.setItem('barber_users', JSON.stringify(cleanUsers));
+
+    // 3. Clear from Firestore collections
+    try {
+      const bookingsSnap = await getDocs(collection(db, 'bookings'));
+      for (const d of bookingsSnap.docs) {
+        await deleteDoc(d.ref);
+      }
+      const transSnap = await getDocs(collection(db, 'transactions'));
+      for (const d of transSnap.docs) {
+        await deleteDoc(d.ref);
+      }
+      const absSnap = await getDocs(collection(db, 'absences'));
+      for (const d of absSnap.docs) {
+        await deleteDoc(d.ref);
+      }
+      const usersSnap = await getDocs(collection(db, 'users'));
+      for (const d of usersSnap.docs) {
+        if (d.data().email !== 'belchior87@gmail.com') {
+          await deleteDoc(d.ref);
+        }
+      }
+      console.log('[Firebase] Dados de teste limpos com sucesso.');
+    } catch (err) {
+      console.error('[Firebase] Erro ao limpar dados de teste no Firestore:', err);
+    }
   }, []);
 
   // Financial Revenue Forecast calculation
   const getRevenueForecasts = useCallback((): RevenueForecast[] => {
-    // Current date reference: 2026-09-02
-    const now = new Date('2026-09-02T00:00:00');
+    const now = new Date();
     const safeUsers = users || [];
     const safeBookings = bookings || [];
     const safePlans = plans || [];
 
-    // Active subscriptions monthly yield
     const activeSubscribers = safeUsers.filter((u) => Boolean(u.subscriptionId));
     const monthlySubscriptionRevenue = activeSubscribers.reduce((acc, user) => {
       const plan = safePlans.find((p) => p.id === user.subscriptionId);
@@ -661,7 +964,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return periods.map(({ period, days, months }) => {
       const endDate = new Date(now.getTime() + days * 24 * 60 * 60 * 1000);
 
-      // Filter upcoming future bookings within range
       const inRangeBookings = safeBookings.filter((b) => {
         const bDate = new Date(`${b.date}T${b.time || '12:00'}`);
         return bDate >= now && bDate <= endDate && b.status === 'AGENDADO';
@@ -685,7 +987,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const safeUsers = users || [];
     const safeBookings = bookings || [];
     const clientsOnly = safeUsers.filter((u) => u.role === 'CLIENT');
-    const todayMs = new Date('2026-09-02T00:00:00').getTime();
+    const todayMs = Date.now();
 
     return clientsOnly.map((c) => {
       const userBookings = safeBookings.filter((b) => b.clientId === c.id);
@@ -694,7 +996,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const cancelled = userBookings.filter((b) => b.status === 'CANCELADO');
       const totalSpent = completed.reduce((acc, curr) => acc + (curr.servicePrice || 0), 0);
 
-      // Find last booking date
       let lastDate: string | null = null;
       if (userBookings.length > 0) {
         const sorted = [...userBookings].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
@@ -744,6 +1045,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       openAuthModal,
       closeAuthModal,
       authModalMode,
+      isFirebaseConnected,
+      clearAllTestData,
       services,
       addService,
       updateService,
@@ -792,6 +1095,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       openAuthModal,
       closeAuthModal,
       authModalMode,
+      isFirebaseConnected,
+      clearAllTestData,
       services,
       addService,
       updateService,
