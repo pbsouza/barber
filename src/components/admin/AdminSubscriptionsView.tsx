@@ -29,6 +29,7 @@ import {
   Code2,
   Info,
   UserPlus,
+  Globe,
 } from 'lucide-react';
 
 interface WebhookEventItem {
@@ -677,18 +678,62 @@ export const AdminSubscriptionsView: React.FC = () => {
             )}
           </div>
 
-          {/* If on GitHub Pages note */}
-          {isGitHubPages && (
-            <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl text-amber-200 text-xs flex items-start gap-2">
-              <Info className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
-              <div>
-                <p className="font-bold">Aviso sobre Hospedagem no GitHub Pages:</p>
-                <p className="text-[11px] text-slate-300 mt-0.5 leading-relaxed">
-                  O GitHub Pages é uma hospedagem estática. Para que a InfinitePay envie notificações externas para a sua aplicação, cadastre no painel da InfinitePay a URL do Cloud Run configurada abaixo. Os testes de simulação nesta tela são salvos diretamente no <strong>Firebase Firestore</strong> e sincronizados em tempo real!
-                </p>
+          {/* Vercel Free Webhook Setup Helper */}
+          <div className="p-4 bg-gradient-to-r from-blue-950/40 via-indigo-950/40 to-slate-900/60 border border-blue-500/30 rounded-2xl text-xs space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 font-bold text-cyan-300">
+                <Globe className="w-4 h-4 text-cyan-400" />
+                <span>Integração Gratuita com Vercel (Sem Cartão de Crédito)</span>
+              </div>
+              <span className="text-[10px] px-2 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 font-semibold">
+                100% Grátis • Plano Hobby
+              </span>
+            </div>
+
+            <p className="text-slate-300 leading-relaxed text-[11px]">
+              O GitHub Pages é uma hospedagem estática e não recebe requisições POST externas de bancos. Criamos no seu projeto o arquivo <code className="text-cyan-300 font-mono bg-slate-950 px-1 py-0.5 rounded">/api/webhooks/infinitepay.ts</code> pronto para a Vercel. Quando a InfinitePay notificar a Vercel, ela grava diretamente no seu <strong>Firebase Firestore</strong> e libera o acesso do cliente no GitHub Pages instantaneamente!
+            </p>
+
+            <div className="pt-1 flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+              <div className="text-[11px] text-slate-400 flex items-center gap-1 font-semibold">
+                <span>Passo a passo:</span>
+              </div>
+              <div className="flex flex-wrap items-center gap-2 text-[11px]">
+                <span className="bg-slate-900 border border-slate-800 px-2 py-1 rounded-lg text-slate-300">
+                  1. Conecte seu GitHub na <a href="https://vercel.com" target="_blank" rel="noreferrer" className="text-cyan-400 underline font-semibold">Vercel.com</a>
+                </span>
+                <span className="bg-slate-900 border border-slate-800 px-2 py-1 rounded-lg text-slate-300">
+                  2. Clique em <strong>Import</strong> do repositório
+                </span>
+                <span className="bg-slate-900 border border-slate-800 px-2 py-1 rounded-lg text-slate-300">
+                  3. Cole a URL do seu projeto Vercel abaixo:
+                </span>
               </div>
             </div>
-          )}
+
+            <div className="flex flex-col sm:flex-row items-stretch gap-2 pt-1">
+              <input
+                type="text"
+                placeholder="Ex: minha-barbearia.vercel.app"
+                onChange={(e) => {
+                  const val = e.target.value.trim().replace(/^https?:\/\//, '').replace(/\/api\/webhooks\/infinitepay\/?$/, '').replace(/\/$/, '');
+                  if (val) {
+                    setServerWebhookUrlInput(`https://${val}/api/webhooks/infinitepay`);
+                  }
+                }}
+                className="flex-1 bg-slate-900 border border-slate-700/80 rounded-xl px-3 py-2 text-white font-mono text-xs placeholder-slate-500 focus:outline-none focus:border-cyan-400"
+              />
+              <button
+                type="button"
+                onClick={() => {
+                  setServerWebhookUrlInput('https://meu-projeto.vercel.app/api/webhooks/infinitepay');
+                }}
+                className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold text-xs transition shrink-0"
+              >
+                Preencher Exemplo
+              </button>
+            </div>
+          </div>
 
           <div className="space-y-2">
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
@@ -696,7 +741,7 @@ export const AdminSubscriptionsView: React.FC = () => {
                 type="text"
                 value={serverWebhookUrlInput}
                 onChange={(e) => setServerWebhookUrlInput(e.target.value)}
-                placeholder="https://sua-api.com/api/webhooks/infinitepay"
+                placeholder="https://seu-projeto.vercel.app/api/webhooks/infinitepay"
                 className="flex-1 bg-slate-900 border border-slate-800 rounded-xl px-4 py-3 text-xs sm:text-sm font-mono text-cyan-300 select-all focus:outline-none focus:border-cyan-500"
               />
               <button
