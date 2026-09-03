@@ -34,6 +34,7 @@ export const SubscriptionPlansModal: React.FC = () => {
 
   const [selectedPlanForCheckout, setSelectedPlanForCheckout] = useState<SubscriptionPlan | null>(null);
   const [orderNsu, setOrderNsu] = useState<string>('');
+  const [manualReceiptNsu, setManualReceiptNsu] = useState<string>('');
   const [copiedLink, setCopiedLink] = useState(false);
   const [copiedNsu, setCopiedNsu] = useState(false);
   const [isActivating, setIsActivating] = useState(false);
@@ -51,6 +52,7 @@ export const SubscriptionPlansModal: React.FC = () => {
 
     const generatedNsu = `SUB-${currentUser.id.replace(/\D/g, '').slice(-4) || 'CLI'}-${Date.now().toString().slice(-6)}`;
     setOrderNsu(generatedNsu);
+    setManualReceiptNsu('');
     setSelectedPlanForCheckout(plan);
     setCopiedLink(false);
     setCopiedNsu(false);
@@ -66,8 +68,10 @@ export const SubscriptionPlansModal: React.FC = () => {
     setIsVerifying(true);
     setVerificationError(null);
 
+    const targetNsu = manualReceiptNsu.trim() || orderNsu;
+
     try {
-      const res = await verifyPaymentForOrder(orderNsu);
+      const res = await verifyPaymentForOrder(targetNsu, selectedPlanForCheckout.monthlyPrice);
 
       if (res.paid && res.event) {
         // Check amount if present
@@ -96,7 +100,7 @@ export const SubscriptionPlansModal: React.FC = () => {
       } else {
         // Payment NOT confirmed by InfinitePay: DO NOT ACTIVATE!
         setVerificationError(
-          `Pagamento ainda não confirmado pela InfinitePay para o pedido "${orderNsu}". Se você acabou de efetuar o pagamento, aguarde alguns segundos e clique em "Verificar Aprovação" novamente.`
+          `Pagamento ainda não confirmado pela InfinitePay para o pedido "${targetNsu}". Se você acabou de efetuar o pagamento pelo link, aguarde alguns segundos ou envie o comprovante no WhatsApp.`
         );
       }
     } catch (err: any) {
@@ -365,6 +369,23 @@ export const SubscriptionPlansModal: React.FC = () => {
                   </div>
                 )}
 
+                {/* Optional NSU / Receipt input */}
+                <div className="p-3 bg-slate-950/60 rounded-xl border border-slate-800 space-y-1.5">
+                  <label className="block text-[11px] font-medium text-slate-400">
+                    Código do Recibo ou NSU da InfinitePay (opcional):
+                  </label>
+                  <input
+                    type="text"
+                    value={manualReceiptNsu}
+                    onChange={(e) => setManualReceiptNsu(e.target.value)}
+                    placeholder={`Padrão: ${orderNsu} (ou código recebido no comprovante)`}
+                    className="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-xs font-mono text-cyan-300 placeholder-slate-600 focus:outline-none focus:border-cyan-500"
+                  />
+                  <p className="text-[10px] text-slate-500">
+                    Se você pagou pelo link do checkout e recebeu um código de transação, pode informá-lo acima.
+                  </p>
+                </div>
+
                 {/* Confirm Subscription Action */}
                 <div className="pt-2 space-y-2.5">
                   <button
@@ -386,6 +407,34 @@ export const SubscriptionPlansModal: React.FC = () => {
                       </>
                     )}
                   </button>
+
+                  {/* Admin Quick Activation Shortcut */}
+                  {(currentUser.role === 'ADMIN' || currentUser.role === 'MASTER') && (
+                    <button
+                      type="button"
+                      disabled={isActivating}
+                      onClick={async () => {
+                        if (!currentUser || !selectedPlanForCheckout) return;
+                        setIsActivating(true);
+                        await subscribeUserToPlan(currentUser.id, selectedPlanForCheckout.id, {
+                          orderNsu: orderNsu || `ADM-${Date.now().toString().slice(-6)}`,
+                          transactionNsu: `TX-ADM-${Date.now().toString().slice(-6)}`,
+                          paymentMethod: 'CARTAO_CREDITO',
+                        });
+                        setIsActivating(false);
+                        setActivationSuccess(true);
+                        setTimeout(() => {
+                          closeSubscriptionModal();
+                          setSelectedPlanForCheckout(null);
+                          setActivationSuccess(false);
+                        }, 2000);
+                      }}
+                      className="w-full py-2.5 px-4 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 text-xs font-bold border border-amber-500/40 transition flex items-center justify-center gap-2 cursor-pointer"
+                    >
+                      <Crown className="w-3.5 h-3.5" />
+                      <span>Ativar Agora (Modo Administrador / Balcão)</span>
+                    </button>
+                  )}
 
                   {/* Secondary option: WhatsApp direct confirmation */}
                   <a

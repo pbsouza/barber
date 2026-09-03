@@ -541,8 +541,26 @@ export const AdminSubscriptionsView: React.FC = () => {
                   {copiedUrl === defaultUrl ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
                 </button>
               </div>
+              {defaultUrl.includes('/api/webhooks') && (
+                <div className="mt-2 p-3 bg-amber-500/15 border border-amber-500/40 rounded-xl text-xs text-amber-200 space-y-1.5">
+                  <div className="flex items-center gap-2 font-bold text-amber-300">
+                    <AlertCircle className="w-4 h-4 shrink-0" />
+                    <span>Atenção: Você colou a URL do Webhook no campo de Link de Pagamento!</span>
+                  </div>
+                  <p className="text-[11px] text-slate-300 leading-relaxed">
+                    O <strong>Link de Pagamento</strong> é a página onde o cliente passa o cartão (ex: <code>https://checkout.infinitepay.io/pedrobs/rzA7EVK6oE</code>). A URL do Webhook (Vercel) deve ficar na seção azul abaixo para receber as notificações da InfinitePay.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setDefaultUrl('https://checkout.infinitepay.io/pedrobs/rzA7EVK6oE')}
+                    className="px-2.5 py-1 rounded bg-amber-500/30 hover:bg-amber-500/40 text-amber-200 text-[11px] font-bold border border-amber-500/50 transition cursor-pointer"
+                  >
+                    Usar Link Correto da InfinitePay (checkout.infinitepay.io/pedrobs/...)
+                  </button>
+                </div>
+              )}
               <p className="text-[11px] text-slate-500 mt-1">
-                Utilizado como link padrão de pagamento com cartão de crédito se o plano não tiver um link específico.
+                Utilizado como link padrão de pagamento com cartão de crédito se o plano não tiver um link específico (ex: link do checkout da InfinitePay).
               </p>
             </div>
           </div>

@@ -89,7 +89,7 @@ interface AppContextType {
   webhookEvents: InfinitePayWebhookEvent[];
   recordWebhookEvent: (event: InfinitePayWebhookEvent) => Promise<void>;
   clearWebhookEvents: () => Promise<void>;
-  verifyPaymentForOrder: (orderNsu: string) => Promise<{ paid: boolean; event?: InfinitePayWebhookEvent; message?: string }>;
+  verifyPaymentForOrder: (orderNsu: string, expectedAmount?: number) => Promise<{ paid: boolean; event?: InfinitePayWebhookEvent; message?: string }>;
 
   // Bookings
   bookings: Booking[];
@@ -749,7 +749,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, []);
 
   const verifyPaymentForOrder = useCallback(
-    async (orderNsu: string): Promise<{ paid: boolean; event?: InfinitePayWebhookEvent; message?: string }> => {
+    async (orderNsu: string, expectedAmount?: number): Promise<{ paid: boolean; event?: InfinitePayWebhookEvent; message?: string }> => {
       if (!orderNsu) {
         return { paid: false, message: 'Identificador do pedido (order_nsu) não informado.' };
       }
@@ -758,7 +758,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       // 1. Check in-memory/real-time Firestore webhook events
       const localMatched = webhookEvents.find(
-        (ev) => ev.order_nsu?.toLowerCase() === cleanNsu && (ev.status === 'PROCESSED' || (ev.status as string) === 'APPROVED')
+        (ev) =>
+          (ev.order_nsu?.toLowerCase() === cleanNsu ||
+            ev.transaction_nsu?.toLowerCase() === cleanNsu ||
+            ev.invoice_slug?.toLowerCase() === cleanNsu) &&
+          (ev.status === 'PROCESSED' || (ev.status as string) === 'APPROVED')
       );
       if (localMatched) {
         return { paid: true, event: localMatched };
@@ -767,12 +771,34 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       // 2. Direct Firestore query in collection 'webhook_events' to ensure latest data
       try {
         const snap = await getDocs(collection(db, 'webhook_events'));
-        const matchedDoc = snap.docs
-          .map((d) => d.data() as InfinitePayWebhookEvent)
-          .find((ev) => ev.order_nsu?.toLowerCase() === cleanNsu && (ev.status === 'PROCESSED' || (ev.status as string) === 'APPROVED'));
+        const allEvents = snap.docs.map((d) => d.data() as InfinitePayWebhookEvent);
+
+        const matchedDoc = allEvents.find(
+          (ev) =>
+            (ev.order_nsu?.toLowerCase() === cleanNsu ||
+              ev.transaction_nsu?.toLowerCase() === cleanNsu ||
+              ev.invoice_slug?.toLowerCase() === cleanNsu) &&
+            (ev.status === 'PROCESSED' || (ev.status as string) === 'APPROVED')
+        );
 
         if (matchedDoc) {
           return { paid: true, event: matchedDoc };
+        }
+
+        // Fallback: If amount is provided, check recent event (last 2 hours) matching amount
+        if (expectedAmount && expectedAmount > 0) {
+          const now = Date.now();
+          const amountMatched = allEvents.find((ev) => {
+            if (ev.status !== 'PROCESSED' && (ev.status as string) !== 'APPROVED') return false;
+            const diff = Math.abs((ev.paid_amount || 0) - expectedAmount);
+            if (diff > 0.5) return false;
+            const eventTime = new Date(ev.receivedAt || 0).getTime();
+            return now - eventTime < 2 * 60 * 60 * 1000;
+          });
+
+          if (amountMatched) {
+            return { paid: true, event: amountMatched };
+          }
         }
       } catch (err) {
         console.warn('[Firebase] Consulta direta a webhook_events falhou:', err);
