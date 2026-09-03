@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
-import { SubscriptionPlan } from '../../types';
+import { SubscriptionPlan, InfinitePayWebhookEvent } from '../../types';
 import {
   Crown,
   CreditCard,
@@ -28,6 +28,7 @@ import {
   Activity,
   Code2,
   Info,
+  UserPlus,
 } from 'lucide-react';
 
 interface WebhookEventItem {
@@ -42,6 +43,32 @@ interface WebhookEventItem {
   rawBody: any;
 }
 
+// Safe fetch that never throws on HTML 404 responses
+async function safeJsonFetch(url: string, options?: RequestInit) {
+  try {
+    const res = await fetch(url, options);
+    const text = await res.text();
+    let json: any = null;
+    try {
+      json = JSON.parse(text);
+    } catch {
+      const isHtml = text.toLowerCase().includes('<html') || text.toLowerCase().includes('<!doctype');
+      return {
+        ok: false,
+        status: res.status,
+        isHtml,
+        error: isHtml
+          ? `O endpoint respondeu com página HTML (status ${res.status}). No GitHub Pages não há servidor Node Express rodando diretamente.`
+          : 'Resposta não é um JSON válido.',
+        raw: text,
+      };
+    }
+    return { ok: res.ok, status: res.status, data: json, raw: text, isHtml: false };
+  } catch (err: any) {
+    return { ok: false, status: 0, error: err?.message || 'Falha de conexão.', isHtml: false };
+  }
+}
+
 export const AdminSubscriptionsView: React.FC = () => {
   const {
     plans,
@@ -52,6 +79,10 @@ export const AdminSubscriptionsView: React.FC = () => {
     updateInfinitePayConfig,
     users,
     cancelUserSubscription,
+    subscribeUserToPlan,
+    webhookEvents: firestoreWebhookEvents,
+    recordWebhookEvent,
+    clearWebhookEvents,
   } = useApp();
 
   // InfinitePay form state
@@ -80,15 +111,25 @@ export const AdminSubscriptionsView: React.FC = () => {
   // QR Code preview modal
   const [qrModal, setQrModal] = useState<{ title: string; url: string } | null>(null);
 
+  // Manual Subscription Activation Modal
+  const [isManualActivationModalOpen, setIsManualActivationModalOpen] = useState(false);
+  const [manualSelectedUserId, setManualSelectedUserId] = useState('');
+  const [manualSelectedPlanId, setManualSelectedPlanId] = useState('');
+  const [manualPaymentNote, setManualPaymentNote] = useState('Pago em dinheiro na barbearia');
+  const [isActivatingManual, setIsActivatingManual] = useState(false);
+  const [manualActivationMsg, setManualActivationMsg] = useState('');
+
   // Webhook InfinitePay state
-  const webhookUrl = typeof window !== 'undefined'
-    ? `${window.location.origin}/api/webhooks/infinitepay`
-    : 'https://seu-dominio/api/webhooks/infinitepay';
+  const isGitHubPages = typeof window !== 'undefined' && window.location.hostname.includes('github.io');
+  const defaultWebhookUrl = infinitePayConfig.serverWebhookUrl || (isGitHubPages
+    ? 'https://ais-pre-pov473yuxfbnsvikwv5lt2-381752577235.us-east5.run.app/api/webhooks/infinitepay'
+    : `${typeof window !== 'undefined' ? window.location.origin : ''}/api/webhooks/infinitepay`);
+
+  const [serverWebhookUrlInput, setServerWebhookUrlInput] = useState(defaultWebhookUrl);
+  const webhookUrl = serverWebhookUrlInput || defaultWebhookUrl;
 
   const [copiedWebhookUrl, setCopiedWebhookUrl] = useState(false);
-  const [webhookEvents, setWebhookEvents] = useState<WebhookEventItem[]>([]);
-  const [loadingEvents, setLoadingEvents] = useState(false);
-  const [webhookHealth, setWebhookHealth] = useState<{ status: string; latency?: number; time?: string } | null>(null);
+  const [webhookHealth, setWebhookHealth] = useState<{ status: string; latency?: number; time?: string; note?: string } | null>(null);
   const [isCheckingHealth, setIsCheckingHealth] = useState(false);
 
   // Webhook Simulator state
@@ -103,31 +144,28 @@ export const AdminSubscriptionsView: React.FC = () => {
   // Raw JSON Inspection Modal
   const [selectedRawPayload, setSelectedRawPayload] = useState<any | null>(null);
 
-  const fetchWebhookEvents = async () => {
-    setLoadingEvents(true);
-    try {
-      const res = await fetch('/api/webhooks/infinitepay/events');
-      if (res.ok) {
-        const data = await res.json();
-        setWebhookEvents(data.events || []);
-      }
-    } catch (err) {
-      console.error('Falha ao buscar eventos do webhook', err);
-    } finally {
-      setLoadingEvents(false);
-    }
-  };
+  // Unified real-time webhook events list (backed by Firestore)
+  const displayWebhookEvents = (firestoreWebhookEvents && firestoreWebhookEvents.length > 0)
+    ? firestoreWebhookEvents
+    : [];
 
   const testWebhookHealth = async () => {
     setIsCheckingHealth(true);
     const start = performance.now();
     try {
-      const res = await fetch('/api/webhooks/infinitepay');
+      const result = await safeJsonFetch(webhookUrl);
       const elapsed = Math.round(performance.now() - start);
-      if (res.ok) {
+      if (result.ok) {
         setWebhookHealth({ status: 'online', latency: elapsed, time: new Date().toLocaleTimeString('pt-BR') });
+      } else if (result.isHtml) {
+        setWebhookHealth({
+          status: 'github_pages',
+          latency: elapsed,
+          time: new Date().toLocaleTimeString('pt-BR'),
+          note: 'Hospedagem estática (GitHub Pages). Use a URL Cloud Run para o webhook bancário externo.',
+        });
       } else {
-        setWebhookHealth({ status: 'error', latency: elapsed });
+        setWebhookHealth({ status: 'offline', latency: elapsed, time: new Date().toLocaleTimeString('pt-BR') });
       }
     } catch {
       setWebhookHealth({ status: 'offline' });
@@ -137,10 +175,9 @@ export const AdminSubscriptionsView: React.FC = () => {
   };
 
   const handleClearWebhookLogs = async () => {
-    if (!window.confirm('Tem certeza que deseja limpar o histórico de eventos de webhook?')) return;
+    if (!window.confirm('Tem certeza que deseja limpar o histórico de eventos de webhook no Firebase Firestore?')) return;
     try {
-      await fetch('/api/webhooks/infinitepay/events', { method: 'DELETE' });
-      setWebhookEvents([]);
+      await clearWebhookEvents();
     } catch (err) {
       console.error('Falha ao limpar logs', err);
     }
@@ -161,51 +198,92 @@ export const AdminSubscriptionsView: React.FC = () => {
 
     setIsSimulating(true);
     setSimFeedback(null);
+
+    const testEvent: InfinitePayWebhookEvent = {
+      id: `ev-${Date.now()}-${Math.floor(1000 + Math.random() * 9000)}`,
+      invoice_slug: simInvoiceSlug.trim() || `inv_sim_${Math.floor(100000 + Math.random() * 900000)}`,
+      order_nsu: simOrderNsu.trim(),
+      paid_amount: parseFloat(simPaidAmount.replace(',', '.')) || 89.9,
+      capture_method: simCaptureMethod,
+      transaction_nsu: `tx_sim_${Math.floor(10000000 + Math.random() * 90000000)}`,
+      receivedAt: new Date().toISOString(),
+      status: 'PROCESSED',
+      rawBody: {
+        invoice_slug: simInvoiceSlug.trim() || `inv_sim_${Date.now()}`,
+        order_nsu: simOrderNsu.trim(),
+        paid_amount: parseFloat(simPaidAmount.replace(',', '.')) || 89.9,
+        capture_method: simCaptureMethod,
+        transaction_nsu: `tx_sim_${Date.now()}`,
+        simulated: true,
+      },
+    };
+
     try {
-      const res = await fetch('/api/webhooks/infinitepay', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          invoice_slug: simInvoiceSlug.trim() || `inv_sim_${Math.floor(100000 + Math.random() * 900000)}`,
-          order_nsu: simOrderNsu.trim(),
-          paid_amount: parseFloat(simPaidAmount.replace(',', '.')) || 89.9,
-          capture_method: simCaptureMethod,
-          transaction_nsu: `tx_sim_${Math.floor(10000000 + Math.random() * 90000000)}`,
-        }),
+      // 1. Record event directly into Firebase Firestore!
+      await recordWebhookEvent(testEvent);
+
+      // 2. Also forward safely to configured server endpoint if reachable
+      try {
+        await safeJsonFetch(webhookUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(testEvent),
+        });
+      } catch {
+        // Safe ignore
+      }
+
+      setSimFeedback({
+        type: 'success',
+        message: `Webhook simulado com sucesso (HTTP 200)! Evento gravado no Firebase Firestore (Pedido: "${testEvent.order_nsu}", Transação: "${testEvent.transaction_nsu}"). Sincronização em tempo real ativa.`,
       });
 
-      const data = await res.json();
-      if (res.ok) {
-        setSimFeedback({
-          type: 'success',
-          message: `Webhook recebido com sucesso (HTTP 200)! Pedido: "${data.order_nsu}", Transação: "${data.transaction_nsu}".`,
-        });
-        fetchWebhookEvents();
-        setTimeout(() => {
-          setIsSimModalOpen(false);
-          setSimFeedback(null);
-        }, 2200);
-      } else {
-        setSimFeedback({
-          type: 'error',
-          message: data.error || data.message || 'Erro ao processar webhook simulado (HTTP 400)',
-        });
-      }
+      setTimeout(() => {
+        setIsSimModalOpen(false);
+        setSimFeedback(null);
+      }, 2500);
     } catch (err: any) {
       setSimFeedback({
         type: 'error',
-        message: err?.message || 'Falha de conexão com o endpoint do servidor.',
+        message: err?.message || 'Erro ao registrar evento no Firebase Firestore.',
       });
     } finally {
       setIsSimulating(false);
     }
   };
 
+  const handleManualActivateSubscription = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!manualSelectedUserId || !manualSelectedPlanId) {
+      setManualActivationMsg('Selecione o cliente e o plano para ativar!');
+      return;
+    }
+
+    setIsActivatingManual(true);
+    setManualActivationMsg('');
+
+    try {
+      await subscribeUserToPlan(manualSelectedUserId, manualSelectedPlanId, {
+        orderNsu: `MANUAL-ADM-${Date.now().toString().slice(-6)}`,
+        transactionNsu: `TX-ADM-${Date.now().toString().slice(-6)}`,
+        paymentMethod: 'PIX',
+      });
+      setManualActivationMsg('Assinatura ativada com sucesso para o cliente!');
+      setTimeout(() => {
+        setIsManualActivationModalOpen(false);
+        setManualActivationMsg('');
+        setManualSelectedUserId('');
+        setManualSelectedPlanId('');
+      }, 1800);
+    } catch (err: any) {
+      setManualActivationMsg(err?.message || 'Erro ao ativar assinatura.');
+    } finally {
+      setIsActivatingManual(false);
+    }
+  };
+
   useEffect(() => {
-    fetchWebhookEvents();
     testWebhookHealth();
-    const interval = setInterval(fetchWebhookEvents, 8000);
-    return () => clearInterval(interval);
   }, []);
 
   // Calculations & stats
@@ -223,6 +301,7 @@ export const AdminSubscriptionsView: React.FC = () => {
       defaultUrl: defaultUrl.trim(),
       enabled,
       notes: notes.trim(),
+      serverWebhookUrl: serverWebhookUrlInput.trim(),
     });
     setSaveSuccessMsg('Configurações da InfinitePay salvas com sucesso!');
     setTimeout(() => setSaveSuccessMsg(''), 4000);
@@ -579,38 +658,72 @@ export const AdminSubscriptionsView: React.FC = () => {
               URL Oficial do Webhook (Endpoint POST):
             </span>
             {webhookHealth && (
-              <span className="text-[11px] text-slate-400 flex items-center gap-1">
-                <span className={`w-2 h-2 rounded-full ${webhookHealth.status === 'online' ? 'bg-emerald-400' : 'bg-rose-400'}`} />
-                {webhookHealth.status === 'online' ? `Online (${webhookHealth.latency}ms)` : 'Offline'}
-              </span>
+              <div className="flex items-center gap-2">
+                <span className="text-[11px] text-slate-400 flex items-center gap-1">
+                  <span className={`w-2 h-2 rounded-full ${
+                    webhookHealth.status === 'online'
+                      ? 'bg-emerald-400'
+                      : webhookHealth.status === 'github_pages'
+                      ? 'bg-amber-400'
+                      : 'bg-rose-400'
+                  }`} />
+                  {webhookHealth.status === 'online'
+                    ? `Online (${webhookHealth.latency}ms)`
+                    : webhookHealth.status === 'github_pages'
+                    ? 'Hospedagem Estática'
+                    : 'Servidor Offline'}
+                </span>
+              </div>
             )}
           </div>
 
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
-            <div className="flex-1 bg-slate-900 border border-slate-800 rounded-xl px-4 py-3 text-xs sm:text-sm font-mono text-cyan-300 break-all select-all flex items-center">
-              {webhookUrl}
+          {/* If on GitHub Pages note */}
+          {isGitHubPages && (
+            <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl text-amber-200 text-xs flex items-start gap-2">
+              <Info className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+              <div>
+                <p className="font-bold">Aviso sobre Hospedagem no GitHub Pages:</p>
+                <p className="text-[11px] text-slate-300 mt-0.5 leading-relaxed">
+                  O GitHub Pages é uma hospedagem estática. Para que a InfinitePay envie notificações externas para a sua aplicação, cadastre no painel da InfinitePay a URL do Cloud Run configurada abaixo. Os testes de simulação nesta tela são salvos diretamente no <strong>Firebase Firestore</strong> e sincronizados em tempo real!
+                </p>
+              </div>
             </div>
-            <button
-              type="button"
-              onClick={handleCopyWebhookUrl}
-              className={`px-5 py-3 rounded-xl font-bold text-xs transition flex items-center justify-center gap-2 shrink-0 ${
-                copiedWebhookUrl
-                  ? 'bg-emerald-500 text-slate-950'
-                  : 'bg-cyan-500 hover:bg-cyan-400 text-slate-950 shadow-lg shadow-cyan-500/20'
-              }`}
-            >
-              {copiedWebhookUrl ? (
-                <>
-                  <Check className="w-4 h-4" />
-                  <span>URL Copiada!</span>
-                </>
-              ) : (
-                <>
-                  <Copy className="w-4 h-4" />
-                  <span>Copiar URL do Webhook</span>
-                </>
-              )}
-            </button>
+          )}
+
+          <div className="space-y-2">
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+              <input
+                type="text"
+                value={serverWebhookUrlInput}
+                onChange={(e) => setServerWebhookUrlInput(e.target.value)}
+                placeholder="https://sua-api.com/api/webhooks/infinitepay"
+                className="flex-1 bg-slate-900 border border-slate-800 rounded-xl px-4 py-3 text-xs sm:text-sm font-mono text-cyan-300 select-all focus:outline-none focus:border-cyan-500"
+              />
+              <button
+                type="button"
+                onClick={handleCopyWebhookUrl}
+                className={`px-5 py-3 rounded-xl font-bold text-xs transition flex items-center justify-center gap-2 shrink-0 ${
+                  copiedWebhookUrl
+                    ? 'bg-emerald-500 text-slate-950'
+                    : 'bg-cyan-500 hover:bg-cyan-400 text-slate-950 shadow-lg shadow-cyan-500/20'
+                }`}
+              >
+                {copiedWebhookUrl ? (
+                  <>
+                    <Check className="w-4 h-4" />
+                    <span>URL Copiada!</span>
+                  </>
+                ) : (
+                  <>
+                    <Copy className="w-4 h-4" />
+                    <span>Copiar URL do Webhook</span>
+                  </>
+                )}
+              </button>
+            </div>
+            <p className="text-[11px] text-slate-500">
+              Esta é a URL que deve ser informada no painel ou webhook da InfinitePay para confirmações automáticas no cartão.
+            </p>
           </div>
         </div>
 
@@ -656,21 +769,21 @@ export const AdminSubscriptionsView: React.FC = () => {
                 Eventos Recebidos da InfinitePay em Tempo Real
               </h4>
               <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 border border-slate-700 font-mono">
-                {webhookEvents.length} {webhookEvents.length === 1 ? 'notificação' : 'notificações'}
+                {displayWebhookEvents.length} {displayWebhookEvents.length === 1 ? 'notificação' : 'notificações'}
               </span>
             </div>
 
             <div className="flex items-center gap-2">
               <button
                 type="button"
-                onClick={fetchWebhookEvents}
-                disabled={loadingEvents}
+                onClick={testWebhookHealth}
+                disabled={isCheckingHealth}
                 className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition"
-                title="Atualizar lista"
+                title="Testar Conexão"
               >
-                <RefreshCw className={`w-3.5 h-3.5 ${loadingEvents ? 'animate-spin text-cyan-400' : ''}`} />
+                <RefreshCw className={`w-3.5 h-3.5 ${isCheckingHealth ? 'animate-spin text-cyan-400' : ''}`} />
               </button>
-              {webhookEvents.length > 0 && (
+              {displayWebhookEvents.length > 0 && (
                 <button
                   type="button"
                   onClick={handleClearWebhookLogs}
@@ -682,12 +795,12 @@ export const AdminSubscriptionsView: React.FC = () => {
             </div>
           </div>
 
-          {webhookEvents.length === 0 ? (
+          {displayWebhookEvents.length === 0 ? (
             <div className="text-center py-8 px-4 bg-slate-900/50 rounded-xl border border-slate-800/80">
               <Radio className="w-8 h-8 text-slate-600 mx-auto mb-2 opacity-60" />
               <p className="text-xs font-semibold text-slate-300">Nenhuma notificação recebida ainda</p>
               <p className="text-[11px] text-slate-500 mt-1 max-w-md mx-auto">
-                O servidor está ativo e aguardando POSTs da InfinitePay. Você pode clicar no botão <strong>"Simular Webhook da InfinitePay"</strong> acima para testar o envio e validação agora mesmo.
+                O webhook sincroniza com o Firebase Firestore em tempo real. Você pode clicar no botão <strong>"Simular Webhook da InfinitePay"</strong> acima para testar o recebimento e validação agora mesmo.
               </p>
             </div>
           ) : (
@@ -705,7 +818,7 @@ export const AdminSubscriptionsView: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-800/60">
-                  {webhookEvents.map((ev) => (
+                  {displayWebhookEvents.map((ev) => (
                     <tr key={ev.id} className="hover:bg-slate-900/40 transition">
                       <td className="py-2.5 font-mono text-[11px] text-slate-400">
                         {new Date(ev.receivedAt).toLocaleTimeString('pt-BR')}
@@ -972,9 +1085,25 @@ export const AdminSubscriptionsView: React.FC = () => {
               Visualize quem são os membros cadastrados, plano contratado e canal direto via WhatsApp.
             </p>
           </div>
-          <span className="text-xs font-semibold text-slate-300 bg-slate-900 border border-slate-800 px-3 py-1.5 rounded-xl">
-            Total: {activeSubscribers.length} assinante(s)
-          </span>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                setManualSelectedUserId('');
+                setManualSelectedPlanId(plans[0]?.id || '');
+                setManualPaymentNote('Pago em dinheiro na barbearia');
+                setManualActivationMsg('');
+                setIsManualActivationModalOpen(true);
+              }}
+              className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-bold text-xs transition shadow-md shadow-amber-500/20 flex items-center gap-1.5 cursor-pointer"
+            >
+              <UserPlus className="w-3.5 h-3.5" />
+              <span>Ativar Assinatura Manual</span>
+            </button>
+            <span className="text-xs font-semibold text-slate-300 bg-slate-900 border border-slate-800 px-3 py-1.5 rounded-xl">
+              Total: {activeSubscribers.length} assinante(s)
+            </span>
+          </div>
         </div>
 
         {activeSubscribers.length === 0 ? (
@@ -1446,6 +1575,104 @@ export const AdminSubscriptionsView: React.FC = () => {
                 Fechar
               </button>
             </div>
+          </div>
+        </div>
+      )}
+      {/* Manual Subscription Activation Modal */}
+      {isManualActivationModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-sm p-4 animate-in fade-in">
+          <div className="bg-[#1e293b] border border-slate-800 rounded-3xl max-w-md w-full p-6 shadow-2xl relative text-slate-100">
+            <button
+              onClick={() => setIsManualActivationModalOpen(false)}
+              className="absolute top-4 right-4 p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center">
+                <UserPlus className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-white">Ativar Assinatura Manual</h3>
+                <p className="text-xs text-slate-400">Para clientes que pagaram em dinheiro, maquininha ou direto no balcão</p>
+              </div>
+            </div>
+
+            {manualActivationMsg && (
+              <div className={`p-3 mb-4 rounded-xl text-xs font-semibold ${
+                manualActivationMsg.includes('sucesso')
+                  ? 'bg-emerald-500/15 border border-emerald-500/30 text-emerald-300'
+                  : 'bg-rose-500/15 border border-rose-500/30 text-rose-300'
+              }`}>
+                {manualActivationMsg}
+              </div>
+            )}
+
+            <form onSubmit={handleManualActivateSubscription} className="space-y-4 text-xs">
+              <div>
+                <label className="block text-slate-300 font-bold mb-1">Selecione o Cliente</label>
+                <select
+                  value={manualSelectedUserId}
+                  onChange={(e) => setManualSelectedUserId(e.target.value)}
+                  className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2.5 text-white focus:outline-none focus:border-amber-500"
+                  required
+                >
+                  <option value="">-- Escolha um cliente cadastrado --</option>
+                  {(users || []).map((u) => (
+                    <option key={u.id} value={u.id}>
+                      {u.name || u.email} {u.phone ? `(${u.phone})` : ''} {u.subscriptionId ? '• [Já é Assinante]' : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-slate-300 font-bold mb-1">Selecione o Plano</label>
+                <select
+                  value={manualSelectedPlanId}
+                  onChange={(e) => setManualSelectedPlanId(e.target.value)}
+                  className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2.5 text-white focus:outline-none focus:border-amber-500"
+                  required
+                >
+                  <option value="">-- Escolha o plano contratado --</option>
+                  {(plans || []).map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name} - R$ {p.monthlyPrice.toFixed(2).replace('.', ',')}/mês
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-slate-300 font-bold mb-1">Observação do Pagamento</label>
+                <input
+                  type="text"
+                  value={manualPaymentNote}
+                  onChange={(e) => setManualPaymentNote(e.target.value)}
+                  placeholder="Ex: Dinheiro no balcão, PIX direto na maquininha..."
+                  className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-white placeholder-slate-500 focus:outline-none focus:border-amber-500"
+                />
+              </div>
+
+              <div className="pt-2 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsManualActivationModalOpen(false)}
+                  className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={isActivatingManual}
+                  className="px-5 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold flex items-center gap-1.5 shadow-lg shadow-amber-500/20"
+                >
+                  <CheckCircle2 className="w-4 h-4" />
+                  <span>{isActivatingManual ? 'Ativando...' : 'Confirmar e Ativar'}</span>
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

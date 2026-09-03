@@ -17,6 +17,7 @@ import {
   Radio,
   RefreshCw,
   Terminal,
+  AlertCircle,
 } from 'lucide-react';
 
 export const SubscriptionPlansModal: React.FC = () => {
@@ -26,6 +27,7 @@ export const SubscriptionPlansModal: React.FC = () => {
     plans,
     currentUser,
     subscribeUserToPlan,
+    verifyPaymentForOrder,
     openAuthModal,
     infinitePayConfig,
   } = useApp();
@@ -35,6 +37,8 @@ export const SubscriptionPlansModal: React.FC = () => {
   const [copiedLink, setCopiedLink] = useState(false);
   const [copiedNsu, setCopiedNsu] = useState(false);
   const [isActivating, setIsActivating] = useState(false);
+  const [isVerifying, setIsVerifying] = useState(false);
+  const [verificationError, setVerificationError] = useState<string | null>(null);
   const [activationSuccess, setActivationSuccess] = useState(false);
   const [webhookConfirmed, setWebhookConfirmed] = useState(false);
 
@@ -52,22 +56,54 @@ export const SubscriptionPlansModal: React.FC = () => {
     setCopiedNsu(false);
     setActivationSuccess(false);
     setWebhookConfirmed(false);
+    setVerificationError(null);
+    setIsVerifying(false);
   };
 
-  const handleConfirmSubscription = () => {
-    if (!currentUser || !selectedPlanForCheckout) return;
+  const handleVerifyAndActivate = async () => {
+    if (!currentUser || !selectedPlanForCheckout || !orderNsu) return;
 
-    setIsActivating(true);
-    setTimeout(() => {
-      subscribeUserToPlan(currentUser.id, selectedPlanForCheckout.id);
-      setIsActivating(false);
-      setActivationSuccess(true);
-      setTimeout(() => {
-        closeSubscriptionModal();
-        setSelectedPlanForCheckout(null);
-        setActivationSuccess(false);
-      }, 2000);
-    }, 600);
+    setIsVerifying(true);
+    setVerificationError(null);
+
+    try {
+      const res = await verifyPaymentForOrder(orderNsu);
+
+      if (res.paid && res.event) {
+        // Check amount if present
+        if (res.event.paid_amount && res.event.paid_amount < selectedPlanForCheckout.monthlyPrice - 0.05) {
+          setVerificationError(
+            `O valor pago identificado (R$ ${res.event.paid_amount.toFixed(2)}) é inferior ao valor da mensalidade (R$ ${selectedPlanForCheckout.monthlyPrice.toFixed(2)}).`
+          );
+          setIsVerifying(false);
+          return;
+        }
+
+        // Successfully verified payment with InfinitePay!
+        setIsActivating(true);
+        await subscribeUserToPlan(currentUser.id, selectedPlanForCheckout.id, {
+          orderNsu: res.event.order_nsu,
+          transactionNsu: res.event.transaction_nsu,
+          paymentMethod: 'CARTAO_CREDITO',
+        });
+        setIsActivating(false);
+        setActivationSuccess(true);
+        setTimeout(() => {
+          closeSubscriptionModal();
+          setSelectedPlanForCheckout(null);
+          setActivationSuccess(false);
+        }, 2500);
+      } else {
+        // Payment NOT confirmed by InfinitePay: DO NOT ACTIVATE!
+        setVerificationError(
+          `Pagamento ainda não confirmado pela InfinitePay para o pedido "${orderNsu}". Se você acabou de efetuar o pagamento, aguarde alguns segundos e clique em "Verificar Aprovação" novamente.`
+        );
+      }
+    } catch (err: any) {
+      setVerificationError(err.message || 'Erro ao consultar status de pagamento.');
+    } finally {
+      setIsVerifying(false);
+    }
   };
 
   const handleCopy = (url: string) => {
@@ -88,31 +124,42 @@ export const SubscriptionPlansModal: React.FC = () => {
 
     const checkWebhookStatus = async () => {
       try {
-        const res = await fetch(`/api/webhooks/infinitepay/status/${encodeURIComponent(orderNsu)}`);
-        if (res.ok) {
-          const data = await res.json();
-          if (data.paid && currentUser && selectedPlanForCheckout) {
-            setWebhookConfirmed(true);
-            setIsActivating(true);
-            subscribeUserToPlan(currentUser.id, selectedPlanForCheckout.id);
-            setIsActivating(false);
-            setActivationSuccess(true);
-            setTimeout(() => {
-              closeSubscriptionModal();
-              setSelectedPlanForCheckout(null);
-              setActivationSuccess(false);
-              setWebhookConfirmed(false);
-            }, 2500);
-          }
+        const res = await verifyPaymentForOrder(orderNsu);
+        if (res.paid && res.event && currentUser && selectedPlanForCheckout) {
+          setWebhookConfirmed(true);
+          setIsActivating(true);
+          await subscribeUserToPlan(currentUser.id, selectedPlanForCheckout.id, {
+            orderNsu: res.event.order_nsu,
+            transactionNsu: res.event.transaction_nsu,
+            paymentMethod: 'CARTAO_CREDITO',
+          });
+          setIsActivating(false);
+          setActivationSuccess(true);
+          setTimeout(() => {
+            closeSubscriptionModal();
+            setSelectedPlanForCheckout(null);
+            setActivationSuccess(false);
+            setWebhookConfirmed(false);
+          }, 2500);
         }
       } catch {
-        // Blips ignored
+        // Blips ignored in background interval
       }
     };
 
-    const interval = setInterval(checkWebhookStatus, 3000);
+    const interval = setInterval(checkWebhookStatus, 3500);
     return () => clearInterval(interval);
-  }, [isSubscriptionModalOpen, selectedPlanForCheckout, orderNsu, activationSuccess, webhookConfirmed, currentUser, subscribeUserToPlan, closeSubscriptionModal]);
+  }, [
+    isSubscriptionModalOpen,
+    selectedPlanForCheckout,
+    orderNsu,
+    activationSuccess,
+    webhookConfirmed,
+    currentUser,
+    subscribeUserToPlan,
+    verifyPaymentForOrder,
+    closeSubscriptionModal,
+  ]);
 
   // Only show active plans to clients
   const visiblePlans = (plans || []).filter((p) => p.isActive !== false);
@@ -302,25 +349,59 @@ export const SubscriptionPlansModal: React.FC = () => {
                   </a>
                 </div>
 
-                {/* Confirm Subscription Button */}
-                <div className="pt-2">
+                {/* Verification Error Notice */}
+                {verificationError && (
+                  <div className="p-4 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-200 text-xs space-y-2 animate-in fade-in">
+                    <div className="flex items-center gap-2 font-bold text-rose-400">
+                      <AlertCircle className="w-4 h-4 shrink-0" />
+                      <span>Pagamento não confirmado pela InfinitePay</span>
+                    </div>
+                    <p className="text-slate-300 leading-relaxed">{verificationError}</p>
+                    <div className="text-[11px] text-slate-400 space-y-1 pt-1 border-t border-rose-500/20">
+                      <p>• Certifique-se de ter concluído o pagamento pelo link ou QR Code da InfinitePay acima.</p>
+                      <p>• Se você acabou de pagar no cartão, aguarde alguns segundos pela compensação e tente novamente.</p>
+                      <p>• Se pagou via PIX ou dinheiro direto com o barbeiro, utilize a opção do WhatsApp abaixo.</p>
+                    </div>
+                  </div>
+                )}
+
+                {/* Confirm Subscription Action */}
+                <div className="pt-2 space-y-2.5">
                   <button
-                    onClick={handleConfirmSubscription}
-                    disabled={isActivating}
-                    className="w-full py-3.5 px-6 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-extrabold text-xs transition shadow-lg shadow-amber-500/20 flex items-center justify-center gap-2"
+                    onClick={handleVerifyAndActivate}
+                    disabled={isActivating || isVerifying}
+                    className="w-full py-3.5 px-6 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 disabled:opacity-50 text-slate-950 font-extrabold text-xs transition shadow-lg shadow-emerald-500/20 flex items-center justify-center gap-2 cursor-pointer disabled:cursor-not-allowed"
                   >
-                    {isActivating ? (
+                    {isVerifying ? (
+                      <>
+                        <RefreshCw className="w-4 h-4 animate-spin" />
+                        <span>Consultando aprovação InfinitePay...</span>
+                      </>
+                    ) : isActivating ? (
                       <span>Ativando plano na sua conta...</span>
                     ) : (
                       <>
-                        <CheckCircle2 className="w-4 h-4" />
-                        <span>Já realizei o pagamento / Confirmar Assinatura Agora</span>
+                        <ShieldCheck className="w-4 h-4" />
+                        <span>Já Realizei o Pagamento — Verificar Aprovação</span>
                       </>
                     )}
                   </button>
+
+                  {/* Secondary option: WhatsApp direct confirmation */}
+                  <a
+                    href={`https://wa.me/5511987654321?text=${encodeURIComponent(
+                      `Olá Belchior! Gostaria de ativar meu plano *${selectedPlanForCheckout.name}* (Identificador: ${orderNsu}). Já efetuei o pagamento, segue o comprovante para liberação.`
+                    )}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="w-full py-2.5 px-4 rounded-xl bg-slate-800/80 hover:bg-slate-800 text-slate-300 hover:text-white text-xs font-semibold border border-slate-700/60 transition flex items-center justify-center gap-2"
+                  >
+                    <span>💬 Paguei por PIX direto ou na barbearia? Enviar comprovante no WhatsApp</span>
+                  </a>
+
                   <p className="text-[11px] text-center text-slate-500 mt-2 flex items-center justify-center gap-1">
                     <Lock className="w-3 h-3" />
-                    Transação 100% segura com cancelamento facilitado a qualquer momento
+                    A assinatura só é liberada com verificação automática do pagamento pela InfinitePay
                   </p>
                 </div>
               </>

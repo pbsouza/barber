@@ -117,6 +117,22 @@
       "properties": {
         "id": { "type": "string" }
       }
+    },
+    "WebhookEvent": {
+      "title": "WebhookEvent",
+      "description": "Eventos de webhook da InfinitePay e pagamentos confirmados",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "invoice_slug": { "type": "string" },
+        "order_nsu": { "type": "string" },
+        "paid_amount": { "type": "number" },
+        "capture_method": { "type": "string" },
+        "transaction_nsu": { "type": "string" },
+        "receivedAt": { "type": "string" },
+        "status": { "type": "string" }
+      },
+      "required": ["id", "order_nsu", "status", "receivedAt"]
     }
   },
   "firestore": {
@@ -147,6 +163,10 @@
     "/settings/{settingId}": {
       "schema": { "$ref": "#/entities/Setting" },
       "description": "Configurações de disponibilidade e integração de pagamentos"
+    },
+    "/webhook_events/{eventId}": {
+      "schema": { "$ref": "#/entities/WebhookEvent" },
+      "description": "Histórico e confirmações de eventos recebidos da InfinitePay"
     }
   }
 }

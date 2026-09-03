@@ -5,6 +5,7 @@ export const INITIAL_INFINITEPAY_CONFIG: InfinitePayConfig = {
   defaultUrl: 'https://pay.infinitepay.io/barbearia-belchior',
   enabled: true,
   notes: 'Pagamento via Cartão de Crédito ou Débito com a segurança e aprovação imediata da InfinitePay.',
+  serverWebhookUrl: 'https://ais-pre-pov473yuxfbnsvikwv5lt2-381752577235.us-east5.run.app/api/webhooks/infinitepay',
 };
 
 export const INITIAL_SERVICES: BarberService[] = [

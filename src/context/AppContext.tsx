@@ -13,6 +13,7 @@ import {
   ClientReportItem,
   RevenueForecast,
   InfinitePayConfig,
+  InfinitePayWebhookEvent,
 } from '../types';
 import {
   INITIAL_SERVICES,
@@ -72,15 +73,23 @@ interface AppContextType {
   addPlan: (plan: Omit<SubscriptionPlan, 'id'>) => Promise<void>;
   updatePlan: (id: string, plan: Partial<SubscriptionPlan>) => Promise<void>;
   deletePlan: (id: string) => Promise<void>;
-  subscribeUserToPlan: (userId: string, planId: string) => Promise<void>;
+  subscribeUserToPlan: (
+    userId: string,
+    planId: string,
+    paymentDetails?: { orderNsu?: string; transactionNsu?: string; paymentMethod?: PaymentMethod }
+  ) => Promise<void>;
   cancelUserSubscription: (userId: string) => Promise<void>;
   isSubscriptionModalOpen: boolean;
   openSubscriptionModal: () => void;
   closeSubscriptionModal: () => void;
 
-  // InfinitePay Digital Wallet Config
+  // InfinitePay Digital Wallet Config & Webhooks
   infinitePayConfig: InfinitePayConfig;
   updateInfinitePayConfig: (config: Partial<InfinitePayConfig>) => Promise<void>;
+  webhookEvents: InfinitePayWebhookEvent[];
+  recordWebhookEvent: (event: InfinitePayWebhookEvent) => Promise<void>;
+  clearWebhookEvents: () => Promise<void>;
+  verifyPaymentForOrder: (orderNsu: string) => Promise<{ paid: boolean; event?: InfinitePayWebhookEvent; message?: string }>;
 
   // Bookings
   bookings: Booking[];
@@ -189,6 +198,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return INITIAL_INFINITEPAY_CONFIG;
     }
   });
+
+  const [webhookEvents, setWebhookEvents] = useState<InfinitePayWebhookEvent[]>([]);
 
   const [bookings, setBookings] = useState<Booking[]>(() => {
     try {
@@ -368,6 +379,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       (err) => console.warn('[Firebase] Erro ao sincronizar usuários:', err.message)
     );
 
+    // 8. Sync Webhook Events
+    const unsubWebhooks = onSnapshot(
+      collection(db, 'webhook_events'),
+      (snapshot) => {
+        const list = snapshot.docs.map((d) => d.data() as InfinitePayWebhookEvent);
+        list.sort((a, b) => new Date(b.receivedAt).getTime() - new Date(a.receivedAt).getTime());
+        setWebhookEvents(list);
+      },
+      (err) => console.warn('[Firebase] Erro ao sincronizar webhook_events:', err.message)
+    );
+
     return () => {
       unsubServices();
       unsubPlans();
@@ -377,6 +399,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       unsubAbsences();
       unsubTransactions();
       unsubUsers();
+      unsubWebhooks();
     };
   }, []);
 
@@ -639,19 +662,41 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Subscription management
   const subscribeUserToPlan = useCallback(
-    async (userId: string, planId: string) => {
+    async (
+      userId: string,
+      planId: string,
+      paymentDetails?: { orderNsu?: string; transactionNsu?: string; paymentMethod?: PaymentMethod }
+    ) => {
       const plan = plans.find((p) => p.id === planId);
       if (!plan) return;
 
       const startDate = new Date().toISOString().split('T')[0];
 
       setUsers((prev) =>
-        prev.map((u) => (u.id === userId ? { ...u, subscriptionId: planId, subscriptionStartDate: startDate } : u))
+        prev.map((u) =>
+          u.id === userId
+            ? {
+                ...u,
+                subscriptionId: planId,
+                subscriptionStartDate: startDate,
+                subscriptionOrderNsu: paymentDetails?.orderNsu,
+                subscriptionPaymentNsu: paymentDetails?.transactionNsu,
+              }
+            : u
+        )
       );
 
       if (currentUser && currentUser.id === userId) {
         setCurrentUser((prev) =>
-          prev ? { ...prev, subscriptionId: planId, subscriptionStartDate: startDate } : null
+          prev
+            ? {
+                ...prev,
+                subscriptionId: planId,
+                subscriptionStartDate: startDate,
+                subscriptionOrderNsu: paymentDetails?.orderNsu,
+                subscriptionPaymentNsu: paymentDetails?.transactionNsu,
+              }
+            : null
         );
       }
 
@@ -659,9 +704,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const newTransaction: CashTransaction = {
         id: `trans-${Date.now()}`,
         type: 'ENTRADA',
-        description: `Assinatura de Plano: ${plan.name}`,
+        description: `Assinatura de Plano: ${plan.name}${paymentDetails?.orderNsu ? ` (${paymentDetails.orderNsu})` : ''}`,
         amount: plan.monthlyPrice,
-        paymentMethod: 'CARTAO_CREDITO',
+        paymentMethod: paymentDetails?.paymentMethod || 'CARTAO_CREDITO',
         category: 'ASSINATURA',
         date: new Date().toISOString(),
         createdByName: 'Sistema Assinaturas',
@@ -672,6 +717,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         await updateDoc(doc(db, 'users', userId), {
           subscriptionId: planId,
           subscriptionStartDate: startDate,
+          subscriptionOrderNsu: paymentDetails?.orderNsu || null,
+          subscriptionPaymentNsu: paymentDetails?.transactionNsu || null,
         });
         await setDoc(doc(db, 'transactions', newTransaction.id), newTransaction);
       } catch (err) {
@@ -679,6 +726,85 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
     },
     [currentUser, plans]
+  );
+
+  const recordWebhookEvent = useCallback(async (event: InfinitePayWebhookEvent) => {
+    setWebhookEvents((prev) => [event, ...prev.filter((e) => e.id !== event.id)]);
+    try {
+      await setDoc(doc(db, 'webhook_events', event.id), event);
+    } catch (err) {
+      console.error('[Firebase] Erro ao gravar webhook_events:', err);
+    }
+  }, []);
+
+  const clearWebhookEvents = useCallback(async () => {
+    setWebhookEvents([]);
+    try {
+      const snap = await getDocs(collection(db, 'webhook_events'));
+      const deletes = snap.docs.map((d) => deleteDoc(d.ref));
+      await Promise.all(deletes);
+    } catch (err) {
+      console.error('[Firebase] Erro ao limpar webhook_events:', err);
+    }
+  }, []);
+
+  const verifyPaymentForOrder = useCallback(
+    async (orderNsu: string): Promise<{ paid: boolean; event?: InfinitePayWebhookEvent; message?: string }> => {
+      if (!orderNsu) {
+        return { paid: false, message: 'Identificador do pedido (order_nsu) não informado.' };
+      }
+
+      const cleanNsu = orderNsu.trim().toLowerCase();
+
+      // 1. Check in-memory/real-time Firestore webhook events
+      const localMatched = webhookEvents.find(
+        (ev) => ev.order_nsu?.toLowerCase() === cleanNsu && (ev.status === 'PROCESSED' || (ev.status as string) === 'APPROVED')
+      );
+      if (localMatched) {
+        return { paid: true, event: localMatched };
+      }
+
+      // 2. Direct Firestore query in collection 'webhook_events' to ensure latest data
+      try {
+        const snap = await getDocs(collection(db, 'webhook_events'));
+        const matchedDoc = snap.docs
+          .map((d) => d.data() as InfinitePayWebhookEvent)
+          .find((ev) => ev.order_nsu?.toLowerCase() === cleanNsu && (ev.status === 'PROCESSED' || (ev.status as string) === 'APPROVED'));
+
+        if (matchedDoc) {
+          return { paid: true, event: matchedDoc };
+        }
+      } catch (err) {
+        console.warn('[Firebase] Consulta direta a webhook_events falhou:', err);
+      }
+
+      // 3. Try checking backend server endpoint safely if reachable
+      try {
+        const serverBase = infinitePayConfig.serverWebhookUrl
+          ? infinitePayConfig.serverWebhookUrl.replace(/\/api\/webhooks\/infinitepay\/?$/, '')
+          : '';
+        const serverUrl = serverBase
+          ? `${serverBase}/api/webhooks/infinitepay/status/${encodeURIComponent(orderNsu)}`
+          : `/api/webhooks/infinitepay/status/${encodeURIComponent(orderNsu)}`;
+
+        const res = await fetch(serverUrl);
+        const text = await res.text();
+        if (text.startsWith('{')) {
+          const data = JSON.parse(text);
+          if (data.paid && data.event) {
+            return { paid: true, event: data.event };
+          }
+        }
+      } catch {
+        // Ignored, server endpoint may be offline or on static host
+      }
+
+      return {
+        paid: false,
+        message: 'Nenhum pagamento confirmado foi localizado para este pedido até o momento.',
+      };
+    },
+    [webhookEvents, infinitePayConfig.serverWebhookUrl]
   );
 
   const cancelUserSubscription = useCallback(
@@ -1057,6 +1183,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       deletePlan,
       infinitePayConfig,
       updateInfinitePayConfig,
+      webhookEvents,
+      recordWebhookEvent,
+      clearWebhookEvents,
+      verifyPaymentForOrder,
       subscribeUserToPlan,
       cancelUserSubscription,
       isSubscriptionModalOpen,
@@ -1107,6 +1237,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       deletePlan,
       infinitePayConfig,
       updateInfinitePayConfig,
+      webhookEvents,
+      recordWebhookEvent,
+      clearWebhookEvents,
+      verifyPaymentForOrder,
       subscribeUserToPlan,
       cancelUserSubscription,
       isSubscriptionModalOpen,

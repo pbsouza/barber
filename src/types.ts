@@ -9,6 +9,8 @@ export interface User {
   avatarUrl?: string;
   subscriptionId?: string; // If subscribed to a club plan
   subscriptionStartDate?: string;
+  subscriptionOrderNsu?: string;
+  subscriptionPaymentNsu?: string;
   createdAt: string;
 }
 
@@ -40,6 +42,19 @@ export interface InfinitePayConfig {
   defaultUrl: string; // URL padrão ou carteira digital InfinitePay
   enabled: boolean;
   notes?: string;
+  serverWebhookUrl?: string; // URL do servidor backend para receber POST da InfinitePay
+}
+
+export interface InfinitePayWebhookEvent {
+  id: string;
+  invoice_slug?: string;
+  order_nsu: string;
+  paid_amount?: number;
+  capture_method?: string;
+  transaction_nsu?: string;
+  receivedAt: string;
+  status: 'PROCESSED' | 'PENDING' | 'FAILED';
+  rawBody?: any;
 }
 
 export type BookingStatus = 'AGENDADO' | 'EXECUTADO' | 'CANCELADO' | 'NAO_COMPARECEU';

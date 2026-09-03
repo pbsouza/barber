@@ -50,5 +50,10 @@ service cloud.firestore {
     match /users/{userId} {
       allow read, write: if true;
     }
+
+    // InfinitePay Webhook Events & Confirmed Payments
+    match /webhook_events/{eventId} {
+      allow read, write: if true;
+    }
   }
 }
