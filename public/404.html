@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>BarberGestão - Redirecionando...</title>
+    <script>
+      // Single Page App redirect for GitHub Pages
+      sessionStorage.redirect = location.href;
+      var pathSegments = location.pathname.split('/');
+      // If deployed in a GitHub project repo (/repo-name/), redirect to repo root
+      var repoBase = pathSegments.length > 2 ? '/' + pathSegments[1] + '/' : '/';
+      location.replace(repoBase);
+    </script>
+  </head>
+  <body style="background-color: #0f172a; color: #94a3b8; font-family: sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0;">
+    <p>Redirecionando para a aplicação...</p>
+  </body>
+</html>
