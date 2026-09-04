@@ -890,10 +890,36 @@ export const AdminSubscriptionsView: React.FC = () => {
                         </span>
                       </td>
                       <td className="py-2.5 font-mono text-cyan-300 font-bold">
-                        {ev.order_nsu}
+                        <div className="flex items-center gap-1.5">
+                          <span className="truncate max-w-[120px] select-all" title={ev.order_nsu}>
+                            {ev.order_nsu}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => navigator.clipboard.writeText(ev.order_nsu)}
+                            className="p-1 rounded hover:bg-slate-800 text-slate-400 hover:text-cyan-300 transition"
+                            title="Copiar Order NSU"
+                          >
+                            <Copy className="w-3 h-3" />
+                          </button>
+                        </div>
                       </td>
                       <td className="py-2.5 font-mono text-slate-300">
-                        {ev.transaction_nsu || '-'}
+                        <div className="flex items-center gap-1.5">
+                          <span className="truncate max-w-[120px] select-all" title={ev.transaction_nsu || ''}>
+                            {ev.transaction_nsu || '-'}
+                          </span>
+                          {ev.transaction_nsu && (
+                            <button
+                              type="button"
+                              onClick={() => navigator.clipboard.writeText(ev.transaction_nsu || '')}
+                              className="p-1 rounded hover:bg-slate-800 text-slate-400 hover:text-cyan-300 transition"
+                              title="Copiar Transaction NSU"
+                            >
+                              <Copy className="w-3 h-3" />
+                            </button>
+                          )}
+                        </div>
                         {ev.invoice_slug && (
                           <span className="text-[10px] text-slate-500 block">
                             Fatura: {ev.invoice_slug}
@@ -921,15 +947,27 @@ export const AdminSubscriptionsView: React.FC = () => {
                           200 OK Processado
                         </span>
                       </td>
-                      <td className="py-2.5 text-right">
+                      <td className="py-2.5 text-right space-x-1.5 whitespace-nowrap">
+                        {ev.transaction_nsu && ev.transaction_nsu.length > 10 && (
+                          <a
+                            href={ev.receipt_url || `https://recibo.infinitepay.io/${ev.transaction_nsu}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="px-2 py-1 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 text-[11px] font-semibold border border-emerald-500/20 transition inline-flex items-center gap-1"
+                            title="Abrir Recibo Oficial InfinitePay"
+                          >
+                            <ExternalLink className="w-3 h-3" />
+                            <span>Recibo</span>
+                          </a>
+                        )}
                         <button
                           type="button"
                           onClick={() => setSelectedRawPayload(ev.rawBody)}
-                          className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-[11px] font-semibold border border-slate-700 transition inline-flex items-center gap-1"
+                          className="px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-[11px] font-semibold border border-slate-700 transition inline-flex items-center gap-1"
                           title="Inspecionar JSON bruto recebido"
                         >
                           <Eye className="w-3 h-3 text-cyan-400" />
-                          <span>Ver JSON</span>
+                          <span>JSON</span>
                         </button>
                       </td>
                     </tr>

@@ -104,6 +104,11 @@ export default async function handler(req: any, res: any) {
         payload.nsu ||
         `tx_${Date.now()}`;
 
+      const receipt_url =
+        payload.receipt_url ||
+        payload.data?.receipt_url ||
+        (transaction_nsu ? `https://recibo.infinitepay.io/${transaction_nsu}` : '');
+
       const eventId = `ev_${Date.now()}_${Math.floor(1000 + Math.random() * 9000)}`;
 
       const eventData = {
@@ -113,6 +118,7 @@ export default async function handler(req: any, res: any) {
         paid_amount: paid_amount,
         capture_method: String(capture_method),
         transaction_nsu: String(transaction_nsu),
+        receipt_url: String(receipt_url),
         status: 'PROCESSED',
         receivedAt: new Date().toISOString(),
         rawBody: JSON.stringify(payload),

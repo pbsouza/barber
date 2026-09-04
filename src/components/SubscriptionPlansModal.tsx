@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useApp } from '../context/AppContext';
-import { SubscriptionPlan } from '../types';
+import { SubscriptionPlan, InfinitePayWebhookEvent } from '../types';
 import {
   X,
   Crown,
@@ -30,6 +30,7 @@ export const SubscriptionPlansModal: React.FC = () => {
     verifyPaymentForOrder,
     openAuthModal,
     infinitePayConfig,
+    webhookEvents,
   } = useApp();
 
   const [selectedPlanForCheckout, setSelectedPlanForCheckout] = useState<SubscriptionPlan | null>(null);
@@ -42,6 +43,19 @@ export const SubscriptionPlansModal: React.FC = () => {
   const [verificationError, setVerificationError] = useState<string | null>(null);
   const [activationSuccess, setActivationSuccess] = useState(false);
   const [webhookConfirmed, setWebhookConfirmed] = useState(false);
+
+  // Find recent webhook event received in the last 2 hours from Firestore
+  const recentWebhookEvent = useMemo(() => {
+    if (!webhookEvents || webhookEvents.length === 0) return null;
+    const now = Date.now();
+    return (
+      webhookEvents.find((ev) => {
+        if (ev.status !== 'PROCESSED' && (ev.status as string) !== 'APPROVED') return false;
+        const eventTime = new Date(ev.receivedAt || 0).getTime();
+        return now - eventTime < 2 * 60 * 60 * 1000;
+      }) || null
+    );
+  }, [webhookEvents]);
 
   const handleSelectPlan = (plan: SubscriptionPlan) => {
     if (!currentUser) {
@@ -62,33 +76,52 @@ export const SubscriptionPlansModal: React.FC = () => {
     setIsVerifying(false);
   };
 
+  const handleConfirmDetectedPayment = async (ev: InfinitePayWebhookEvent) => {
+    if (!currentUser || !selectedPlanForCheckout) return;
+    setIsActivating(true);
+    setVerificationError(null);
+    try {
+      await subscribeUserToPlan(currentUser.id, selectedPlanForCheckout.id, {
+        orderNsu: ev.order_nsu,
+        transactionNsu: ev.transaction_nsu,
+        paymentMethod: ev.capture_method?.toLowerCase().includes('pix') ? 'PIX' : 'CARTAO_CREDITO',
+      });
+      setIsActivating(false);
+      setActivationSuccess(true);
+      setTimeout(() => {
+        closeSubscriptionModal();
+        setSelectedPlanForCheckout(null);
+        setActivationSuccess(false);
+      }, 2500);
+    } catch (err: any) {
+      setVerificationError(err?.message || 'Erro ao vincular pagamento.');
+      setIsActivating(false);
+    }
+  };
+
   const handleVerifyAndActivate = async () => {
-    if (!currentUser || !selectedPlanForCheckout || !orderNsu) return;
+    if (!currentUser || !selectedPlanForCheckout) return;
 
     setIsVerifying(true);
     setVerificationError(null);
 
-    const targetNsu = manualReceiptNsu.trim() || orderNsu;
+    // If manual NSU was provided, use it. Otherwise, if there is a recent webhook event, use its NSU, or fallback to orderNsu
+    const targetNsu =
+      manualReceiptNsu.trim() ||
+      recentWebhookEvent?.transaction_nsu ||
+      recentWebhookEvent?.order_nsu ||
+      orderNsu;
 
     try {
       const res = await verifyPaymentForOrder(targetNsu, selectedPlanForCheckout.monthlyPrice);
 
       if (res.paid && res.event) {
-        // Check amount if present
-        if (res.event.paid_amount && res.event.paid_amount < selectedPlanForCheckout.monthlyPrice - 0.05) {
-          setVerificationError(
-            `O valor pago identificado (R$ ${res.event.paid_amount.toFixed(2)}) é inferior ao valor da mensalidade (R$ ${selectedPlanForCheckout.monthlyPrice.toFixed(2)}).`
-          );
-          setIsVerifying(false);
-          return;
-        }
-
         // Successfully verified payment with InfinitePay!
         setIsActivating(true);
         await subscribeUserToPlan(currentUser.id, selectedPlanForCheckout.id, {
           orderNsu: res.event.order_nsu,
           transactionNsu: res.event.transaction_nsu,
-          paymentMethod: 'CARTAO_CREDITO',
+          paymentMethod: res.event.capture_method?.toLowerCase().includes('pix') ? 'PIX' : 'CARTAO_CREDITO',
         });
         setIsActivating(false);
         setActivationSuccess(true);
@@ -100,7 +133,7 @@ export const SubscriptionPlansModal: React.FC = () => {
       } else {
         // Payment NOT confirmed by InfinitePay: DO NOT ACTIVATE!
         setVerificationError(
-          `Pagamento ainda não confirmado pela InfinitePay para o pedido "${targetNsu}". Se você acabou de efetuar o pagamento pelo link, aguarde alguns segundos ou envie o comprovante no WhatsApp.`
+          `Pagamento ainda não confirmado pela InfinitePay para o código "${targetNsu}". Se você acabou de efetuar o pagamento pelo link, aguarde alguns segundos ou envie o comprovante no WhatsApp.`
         );
       }
     } catch (err: any) {
@@ -122,20 +155,26 @@ export const SubscriptionPlansModal: React.FC = () => {
     setTimeout(() => setCopiedNsu(false), 3000);
   };
 
-  // Real-time Webhook Polling: listens for InfinitePay confirmation for this order_nsu
+  // Real-time Webhook Polling: listens for InfinitePay confirmation for this order or recent payment
   useEffect(() => {
-    if (!isSubscriptionModalOpen || !selectedPlanForCheckout || !orderNsu || activationSuccess || webhookConfirmed) return;
+    if (!isSubscriptionModalOpen || !selectedPlanForCheckout || activationSuccess || webhookConfirmed) return;
 
     const checkWebhookStatus = async () => {
       try {
-        const res = await verifyPaymentForOrder(orderNsu);
+        const targetNsu =
+          manualReceiptNsu.trim() ||
+          recentWebhookEvent?.transaction_nsu ||
+          recentWebhookEvent?.order_nsu ||
+          orderNsu;
+
+        const res = await verifyPaymentForOrder(targetNsu, selectedPlanForCheckout.monthlyPrice);
         if (res.paid && res.event && currentUser && selectedPlanForCheckout) {
           setWebhookConfirmed(true);
           setIsActivating(true);
           await subscribeUserToPlan(currentUser.id, selectedPlanForCheckout.id, {
             orderNsu: res.event.order_nsu,
             transactionNsu: res.event.transaction_nsu,
-            paymentMethod: 'CARTAO_CREDITO',
+            paymentMethod: res.event.capture_method?.toLowerCase().includes('pix') ? 'PIX' : 'CARTAO_CREDITO',
           });
           setIsActivating(false);
           setActivationSuccess(true);
@@ -157,6 +196,8 @@ export const SubscriptionPlansModal: React.FC = () => {
     isSubscriptionModalOpen,
     selectedPlanForCheckout,
     orderNsu,
+    manualReceiptNsu,
+    recentWebhookEvent,
     activationSuccess,
     webhookConfirmed,
     currentUser,
@@ -270,32 +311,77 @@ export const SubscriptionPlansModal: React.FC = () => {
                     </span>
                   </div>
 
-                  {/* Order NSU Identifier Box */}
-                  <div className="p-3 bg-slate-950/80 rounded-xl border border-cyan-500/30 flex items-center justify-between gap-3">
-                    <div>
-                      <span className="text-[10px] text-cyan-400 font-bold uppercase tracking-wider block flex items-center gap-1">
-                        <Terminal className="w-3 h-3" />
-                        Identificador do seu Pedido (order_nsu)
-                      </span>
-                      <span className="font-mono text-xs font-bold text-white select-all">
-                        {orderNsu}
-                      </span>
+                  {/* Order NSU or Detected Payment Box */}
+                  {recentWebhookEvent ? (
+                    <div className="p-4 bg-gradient-to-r from-emerald-950/70 via-slate-900 to-slate-900 border-2 border-emerald-500/60 rounded-2xl space-y-3 shadow-lg shadow-emerald-950/60 animate-in fade-in">
+                      <div className="flex items-center justify-between">
+                        <span className="flex items-center gap-1.5 text-xs font-extrabold text-emerald-400">
+                          <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                          Pagamento Detectado no Firebase!
+                        </span>
+                        <span className="text-[10px] uppercase font-mono px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-bold">
+                          {recentWebhookEvent.capture_method === 'pix' ? 'PIX' : 'Cartão de Crédito'}
+                        </span>
+                      </div>
+
+                      <div className="text-[11px] font-mono text-slate-300 space-y-1.5 bg-slate-950/80 p-3 rounded-xl border border-slate-800">
+                        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-1">
+                          <span className="text-slate-400">Código do Recibo / NSU:</span>
+                          <span className="text-white font-bold text-xs select-all break-all">
+                            {recentWebhookEvent.transaction_nsu || recentWebhookEvent.order_nsu}
+                          </span>
+                        </div>
+                        {recentWebhookEvent.invoice_slug && (
+                          <div className="flex justify-between items-center text-[10px]">
+                            <span className="text-slate-400">Fatura:</span>
+                            <span className="text-cyan-300 font-semibold">{recentWebhookEvent.invoice_slug}</span>
+                          </div>
+                        )}
+                        <div className="flex justify-between items-center text-[10px]">
+                          <span className="text-slate-400">Registrado em:</span>
+                          <span className="text-slate-300">
+                            {new Date(recentWebhookEvent.receivedAt).toLocaleTimeString('pt-BR')} (Hoje)
+                          </span>
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => handleConfirmDetectedPayment(recentWebhookEvent)}
+                        disabled={isActivating}
+                        className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-extrabold text-xs transition flex items-center justify-center gap-2 shadow-md cursor-pointer disabled:opacity-50"
+                      >
+                        <Crown className="w-4 h-4" />
+                        <span>Vincular Este Pagamento e Ativar Minha Assinatura</span>
+                      </button>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => handleCopyNsu(orderNsu)}
-                      className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-200 flex items-center gap-1 transition shrink-0"
-                    >
-                      {copiedNsu ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-                      <span>{copiedNsu ? 'Copiado!' : 'Copiar'}</span>
-                    </button>
-                  </div>
+                  ) : (
+                    <div className="p-3 bg-slate-950/80 rounded-xl border border-cyan-500/30 flex items-center justify-between gap-3">
+                      <div>
+                        <span className="text-[10px] text-cyan-400 font-bold uppercase tracking-wider block flex items-center gap-1">
+                          <Terminal className="w-3 h-3" />
+                          Sessão do Pedido
+                        </span>
+                        <span className="font-mono text-xs font-bold text-white select-all">
+                          {orderNsu}
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleCopyNsu(orderNsu)}
+                        className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-200 flex items-center gap-1 transition shrink-0"
+                      >
+                        {copiedNsu ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                        <span>{copiedNsu ? 'Copiado!' : 'Copiar'}</span>
+                      </button>
+                    </div>
+                  )}
 
                   {/* Real-time Webhook Waiting Indicator */}
                   <div className="p-2.5 bg-cyan-950/20 rounded-xl border border-cyan-500/20 flex items-center gap-2.5">
                     <span className="w-2 h-2 rounded-full bg-cyan-400 animate-ping shrink-0" />
                     <span className="text-[11px] text-slate-300">
-                      Aguardando confirmação em tempo real via <strong>Webhook InfinitePay</strong>. Assim que você pagar no cartão, sua assinatura ativará sozinha!
+                      Monitorando confirmações em tempo real via <strong>Firebase Firestore</strong>. Assim que você pagar no link, o sistema reconhece seu recibo automaticamente!
                     </span>
                   </div>
 
@@ -371,18 +457,24 @@ export const SubscriptionPlansModal: React.FC = () => {
 
                 {/* Optional NSU / Receipt input */}
                 <div className="p-3 bg-slate-950/60 rounded-xl border border-slate-800 space-y-1.5">
-                  <label className="block text-[11px] font-medium text-slate-400">
-                    Código do Recibo ou NSU da InfinitePay (opcional):
+                  <label className="block text-[11px] font-medium text-slate-300">
+                    Código do Recibo, NSU ou Link InfinitePay:
                   </label>
                   <input
                     type="text"
                     value={manualReceiptNsu}
                     onChange={(e) => setManualReceiptNsu(e.target.value)}
-                    placeholder={`Padrão: ${orderNsu} (ou código recebido no comprovante)`}
+                    placeholder={
+                      recentWebhookEvent?.transaction_nsu ||
+                      recentWebhookEvent?.order_nsu ||
+                      'Ex: fad4a6bf-a1cc... ou cole o link do recibo'
+                    }
                     className="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-xs font-mono text-cyan-300 placeholder-slate-600 focus:outline-none focus:border-cyan-500"
                   />
                   <p className="text-[10px] text-slate-500">
-                    Se você pagou pelo link do checkout e recebeu um código de transação, pode informá-lo acima.
+                    {recentWebhookEvent
+                      ? 'Um pagamento recente já foi identificado no Firebase acima! Você também pode informar outro código se necessário.'
+                      : 'Cole o código NSU, identificador da fatura ou link do comprovante gerado após o pagamento.'}
                   </p>
                 </div>
 

@@ -52,6 +52,7 @@ export interface InfinitePayWebhookEvent {
   paid_amount?: number;
   capture_method?: string;
   transaction_nsu?: string;
+  receipt_url?: string;
   receivedAt: string;
   status: 'PROCESSED' | 'PENDING' | 'FAILED';
   rawBody?: any;
