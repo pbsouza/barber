@@ -37,6 +37,15 @@ import {
 } from 'firebase/firestore';
 import { db, testFirestoreConnection } from '../firebase';
 
+// Helper to validate active subscription access
+// "O sistema vai comparar vai buscar por status: PROCESSED, libera acesso a assinatura. Senão não libera."
+export const isUserSubscriber = (user?: User | null): boolean => {
+  if (!user) return false;
+  const hasPlan = Boolean(user.subscriptionId);
+  const isProcessed = user.status === 'PROCESSED' || user.subscriptionStatus === 'PROCESSED';
+  return hasPlan && isProcessed;
+};
+
 interface PendingBookingData {
   serviceId: string;
   barberName: string;
@@ -79,6 +88,8 @@ interface AppContextType {
     paymentDetails?: { orderNsu?: string; transactionNsu?: string; paymentMethod?: PaymentMethod }
   ) => Promise<void>;
   cancelUserSubscription: (userId: string) => Promise<void>;
+  isUserSubscriber: (user?: User | null) => boolean;
+  setUserPendingCheckout: (userId: string, planId: string, orderNsu: string) => Promise<void>;
   isSubscriptionModalOpen: boolean;
   openSubscriptionModal: () => void;
   closeSubscriptionModal: () => void;
@@ -374,6 +385,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         } else {
           const list = snapshot.docs.map((d) => d.data() as User);
           setUsers(list);
+          setCurrentUser((prev) => {
+            if (!prev) return null;
+            const updated = list.find((u) => u.id === prev.id);
+            return updated ? { ...prev, ...updated } : prev;
+          });
         }
       },
       (err) => console.warn('[Firebase] Erro ao sincronizar usuários:', err.message)
@@ -680,7 +696,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 subscriptionId: planId,
                 subscriptionStartDate: startDate,
                 subscriptionOrderNsu: paymentDetails?.orderNsu,
+                order_nsu: paymentDetails?.orderNsu,
                 subscriptionPaymentNsu: paymentDetails?.transactionNsu,
+                status: 'PROCESSED',
+                subscriptionStatus: 'PROCESSED',
               }
             : u
         )
@@ -694,7 +713,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 subscriptionId: planId,
                 subscriptionStartDate: startDate,
                 subscriptionOrderNsu: paymentDetails?.orderNsu,
+                order_nsu: paymentDetails?.orderNsu,
                 subscriptionPaymentNsu: paymentDetails?.transactionNsu,
+                status: 'PROCESSED',
+                subscriptionStatus: 'PROCESSED',
               }
             : null
         );
@@ -718,7 +740,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           subscriptionId: planId,
           subscriptionStartDate: startDate,
           subscriptionOrderNsu: paymentDetails?.orderNsu || null,
+          order_nsu: paymentDetails?.orderNsu || null,
           subscriptionPaymentNsu: paymentDetails?.transactionNsu || null,
+          status: 'PROCESSED',
+          subscriptionStatus: 'PROCESSED',
         });
         await setDoc(doc(db, 'transactions', newTransaction.id), newTransaction);
       } catch (err) {
@@ -727,6 +752,163 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     },
     [currentUser, plans]
   );
+
+  const cancelUserSubscription = useCallback(
+    async (userId: string) => {
+      setUsers((prev) =>
+        prev.map((u) =>
+          u.id === userId
+            ? {
+                ...u,
+                subscriptionId: undefined,
+                subscriptionStartDate: undefined,
+                subscriptionOrderNsu: undefined,
+                order_nsu: undefined,
+                subscriptionPaymentNsu: undefined,
+                status: 'CANCELLED',
+                subscriptionStatus: 'CANCELLED',
+              }
+            : u
+        )
+      );
+      if (currentUser && currentUser.id === userId) {
+        setCurrentUser((prev) =>
+          prev
+            ? {
+                ...prev,
+                subscriptionId: undefined,
+                subscriptionStartDate: undefined,
+                subscriptionOrderNsu: undefined,
+                order_nsu: undefined,
+                subscriptionPaymentNsu: undefined,
+                status: 'CANCELLED',
+                subscriptionStatus: 'CANCELLED',
+              }
+            : null
+        );
+      }
+      try {
+        await updateDoc(doc(db, 'users', userId), {
+          subscriptionId: null,
+          subscriptionStartDate: null,
+          subscriptionOrderNsu: null,
+          order_nsu: null,
+          subscriptionPaymentNsu: null,
+          status: 'CANCELLED',
+          subscriptionStatus: 'CANCELLED',
+        });
+      } catch (err) {
+        console.error('[Firebase] Erro ao cancelar assinatura:', err);
+      }
+    },
+    [currentUser]
+  );
+
+  const setUserPendingCheckout = useCallback(
+    async (userId: string, planId: string, orderNsu: string) => {
+      setUsers((prev) =>
+        prev.map((u) =>
+          u.id === userId
+            ? {
+                ...u,
+                status: 'PENDING',
+                subscriptionStatus: 'PENDING',
+                pendingPlanId: planId,
+                pendingOrderNsu: orderNsu,
+                order_nsu: orderNsu,
+                subscriptionOrderNsu: orderNsu,
+                lastCheckoutAt: new Date().toISOString(),
+              }
+            : u
+        )
+      );
+      if (currentUser && currentUser.id === userId) {
+        setCurrentUser((prev) =>
+          prev
+            ? {
+                ...prev,
+                status: 'PENDING',
+                subscriptionStatus: 'PENDING',
+                pendingPlanId: planId,
+                pendingOrderNsu: orderNsu,
+                order_nsu: orderNsu,
+                subscriptionOrderNsu: orderNsu,
+                lastCheckoutAt: new Date().toISOString(),
+              }
+            : null
+        );
+      }
+      try {
+        await updateDoc(doc(db, 'users', userId), {
+          status: 'PENDING',
+          subscriptionStatus: 'PENDING',
+          pendingPlanId: planId,
+          pendingOrderNsu: orderNsu,
+          order_nsu: orderNsu,
+          subscriptionOrderNsu: orderNsu,
+          lastCheckoutAt: new Date().toISOString(),
+        });
+      } catch (e) {
+        console.warn('[Firebase] Erro ao marcar checkout pendente:', e);
+      }
+    },
+    [currentUser]
+  );
+
+  // Instant reactive activation:
+  // "Ao gravar o evento no webhook, no campo status, grava também naquele cliente específico o mesmo status e a orde_nsu.
+  // Assim a validação vai ser instantâneo. O sistema vai comparar vai buscar por status: PROCESSED, libera acesso a assinatura. Senão não libera."
+  useEffect(() => {
+    if (!currentUser || currentUser.role === 'ADMIN') return;
+
+    // Se já está com status: PROCESSED e plano ativo, o acesso já está liberado
+    if (
+      currentUser.subscriptionId &&
+      (currentUser.status === 'PROCESSED' || currentUser.subscriptionStatus === 'PROCESSED')
+    ) {
+      return;
+    }
+
+    const pendingNsu = (
+      currentUser.pendingOrderNsu ||
+      currentUser.order_nsu ||
+      currentUser.subscriptionOrderNsu ||
+      ''
+    ).toLowerCase().trim();
+    const cleanUserId = currentUser.id.toLowerCase().trim();
+    const pendingPlan = currentUser.pendingPlanId || 'plano-ouro';
+
+    // Procura evento com status: 'PROCESSED' correspondente
+    const matchingProcessedEvent = webhookEvents.find((ev) => {
+      if (ev.status !== 'PROCESSED' && (ev.status as string) !== 'APPROVED') return false;
+      const evOrderNsu = (ev.order_nsu || '').toLowerCase().trim();
+      const evTxNsu = (ev.transaction_nsu || '').toLowerCase().trim();
+
+      if (pendingNsu && (evOrderNsu.includes(pendingNsu) || pendingNsu.includes(evOrderNsu) || evTxNsu.includes(pendingNsu))) {
+        return true;
+      }
+      if (cleanUserId && (evOrderNsu.includes(cleanUserId) || cleanUserId.includes(evOrderNsu))) {
+        return true;
+      }
+
+      if (currentUser.status === 'PENDING' || currentUser.subscriptionStatus === 'PENDING') {
+        const timeDiff = Date.now() - new Date(ev.receivedAt || 0).getTime();
+        if (timeDiff < 2 * 60 * 60 * 1000) {
+          return true;
+        }
+      }
+      return false;
+    });
+
+    if (matchingProcessedEvent) {
+      console.log('[AppContext] Webhook PROCESSED detectado instantaneamente! Ativando assinatura do cliente:', matchingProcessedEvent);
+      subscribeUserToPlan(currentUser.id, pendingPlan, {
+        orderNsu: matchingProcessedEvent.order_nsu,
+        transactionNsu: matchingProcessedEvent.transaction_nsu,
+        paymentMethod: matchingProcessedEvent.capture_method?.toLowerCase().includes('pix') ? 'PIX' : 'CARTAO_CREDITO',
+      });
+    }
+  }, [currentUser, webhookEvents, subscribeUserToPlan]);
 
   const recordWebhookEvent = useCallback(async (event: InfinitePayWebhookEvent) => {
     setWebhookEvents((prev) => [event, ...prev.filter((e) => e.id !== event.id)]);
@@ -881,28 +1063,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     [webhookEvents, infinitePayConfig.serverWebhookUrl]
   );
 
-  const cancelUserSubscription = useCallback(
-    async (userId: string) => {
-      setUsers((prev) =>
-        prev.map((u) => (u.id === userId ? { ...u, subscriptionId: undefined, subscriptionStartDate: undefined } : u))
-      );
-      if (currentUser && currentUser.id === userId) {
-        setCurrentUser((prev) =>
-          prev ? { ...prev, subscriptionId: undefined, subscriptionStartDate: undefined } : null
-        );
-      }
-      try {
-        await updateDoc(doc(db, 'users', userId), {
-          subscriptionId: null,
-          subscriptionStartDate: null,
-        });
-      } catch (err) {
-        console.error('[Firebase] Erro ao cancelar assinatura:', err);
-      }
-    },
-    [currentUser]
-  );
-
   // Booking batch creation
   const createBookingBatch = useCallback(
     async (bookingData: PendingBookingData, client: User): Promise<string[]> => {
@@ -910,7 +1070,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (!selectedService) return [];
 
       const recurrenceId = bookingData.datesAndTimes.length > 1 ? `rec-${Date.now()}` : undefined;
-      const isSubscriber = Boolean(client.subscriptionId);
+      const isSubscriber = isUserSubscriber(client);
 
       const createdIds: string[] = [];
       const newBookings: Booking[] = bookingData.datesAndTimes.map((item, index) => {
@@ -1143,7 +1303,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const safeBookings = bookings || [];
     const safePlans = plans || [];
 
-    const activeSubscribers = safeUsers.filter((u) => Boolean(u.subscriptionId));
+    const activeSubscribers = safeUsers.filter((u) => isUserSubscriber(u));
     const monthlySubscriptionRevenue = activeSubscribers.reduce((acc, user) => {
       const plan = safePlans.find((p) => p.id === user.subscriptionId);
       return acc + (plan?.monthlyPrice || 0);
@@ -1227,7 +1387,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         totalSpent,
         lastBookingDate: lastDate,
         status,
-        hasSubscription: Boolean(c.subscriptionId),
+        hasSubscription: isUserSubscriber(c),
       };
     });
   }, [users, bookings]);
@@ -1263,6 +1423,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       verifyPaymentForOrder,
       subscribeUserToPlan,
       cancelUserSubscription,
+      isUserSubscriber,
+      setUserPendingCheckout,
       isSubscriptionModalOpen,
       openSubscriptionModal,
       closeSubscriptionModal,
@@ -1317,6 +1479,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       verifyPaymentForOrder,
       subscribeUserToPlan,
       cancelUserSubscription,
+      setUserPendingCheckout,
       isSubscriptionModalOpen,
       openSubscriptionModal,
       closeSubscriptionModal,

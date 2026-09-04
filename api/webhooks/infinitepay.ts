@@ -159,6 +159,126 @@ export default async function handler(req: any, res: any) {
         }).catch((e) => console.warn('[Vercel Webhook] Falha ao registrar caixa:', e));
       }
 
+      // 3. Atualiza o cliente específico no Firestore com status: PROCESSED e order_nsu
+      try {
+        const queryUrl = `https://firestore.googleapis.com/v1/projects/${FIREBASE_PROJECT_ID}/databases/${FIRESTORE_DB_ID}/documents:runQuery?key=${FIREBASE_API_KEY}`;
+        const queryRes = await fetch(queryUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            structuredQuery: {
+              from: [{ collectionId: 'users' }],
+            },
+          }),
+        });
+
+        if (queryRes.ok) {
+          const userResults = await queryRes.json();
+          const cleanOrderNsu = String(order_nsu || '').trim().toLowerCase();
+          const cleanTxNsu = String(transaction_nsu || '').trim().toLowerCase();
+
+          const parseUserDoc = (item: any) => {
+            if (!item.document || !item.document.fields) return null;
+            const f = item.document.fields;
+            const docName = item.document.name;
+            const id = f.id?.stringValue || docName.split('/').pop();
+            const role = f.role?.stringValue || 'CLIENT';
+            const pendingOrderNsu = f.pendingOrderNsu?.stringValue || '';
+            const subscriptionOrderNsu = f.subscriptionOrderNsu?.stringValue || '';
+            const order_nsu_field = f.order_nsu?.stringValue || '';
+            const pendingPlanId = f.pendingPlanId?.stringValue || 'plano-ouro';
+            const subscriptionStatus = f.subscriptionStatus?.stringValue || '';
+            const status = f.status?.stringValue || '';
+            const lastCheckoutAt = f.lastCheckoutAt?.stringValue || '';
+            return {
+              docName,
+              id,
+              role,
+              pendingOrderNsu,
+              subscriptionOrderNsu,
+              order_nsu: order_nsu_field,
+              pendingPlanId,
+              subscriptionStatus,
+              status,
+              lastCheckoutAt,
+            };
+          };
+
+          const userDocs = userResults
+            .map(parseUserDoc)
+            .filter((u: any) => u !== null && u.role !== 'ADMIN');
+
+          // Match client:
+          // A. By order_nsu or transaction_nsu
+          let matchedClient = userDocs.find((u: any) => {
+            const uId = (u.id || '').toLowerCase();
+            const pNsu = (u.pendingOrderNsu || '').toLowerCase();
+            const sNsu = (u.subscriptionOrderNsu || '').toLowerCase();
+            const oNsu = (u.order_nsu || '').toLowerCase();
+
+            return (
+              (cleanOrderNsu && (uId === cleanOrderNsu || pNsu === cleanOrderNsu || sNsu === cleanOrderNsu || oNsu === cleanOrderNsu)) ||
+              (cleanTxNsu && (pNsu === cleanTxNsu || sNsu === cleanTxNsu || oNsu === cleanTxNsu))
+            );
+          });
+
+          // B. Partial match if order_nsu contains user ID or vice-versa
+          if (!matchedClient) {
+            matchedClient = userDocs.find((u: any) => {
+              const uId = (u.id || '').toLowerCase();
+              return cleanOrderNsu && uId && (cleanOrderNsu.includes(uId) || uId.includes(cleanOrderNsu));
+            });
+          }
+
+          // C. Fallback: Find client with PENDING status or most recent checkout
+          if (!matchedClient && userDocs.length > 0) {
+            const pendingClients = userDocs.filter(
+              (u: any) => u.subscriptionStatus === 'PENDING' || u.status === 'PENDING'
+            );
+            if (pendingClients.length > 0) {
+              pendingClients.sort(
+                (a: any, b: any) => new Date(b.lastCheckoutAt || 0).getTime() - new Date(a.lastCheckoutAt || 0).getTime()
+              );
+              matchedClient = pendingClients[0];
+            } else {
+              matchedClient = userDocs[0];
+            }
+          }
+
+          if (matchedClient) {
+            const targetDocName = matchedClient.docName;
+            const patchUrl = `https://firestore.googleapis.com/v1/${targetDocName}?updateMask.fieldPaths=status&updateMask.fieldPaths=subscriptionStatus&updateMask.fieldPaths=order_nsu&updateMask.fieldPaths=subscriptionOrderNsu&updateMask.fieldPaths=subscriptionPaymentNsu&updateMask.fieldPaths=subscriptionId&updateMask.fieldPaths=subscriptionStartDate&key=${FIREBASE_API_KEY}`;
+
+            const updateData = {
+              status: 'PROCESSED',
+              subscriptionStatus: 'PROCESSED',
+              order_nsu: String(order_nsu).trim(),
+              subscriptionOrderNsu: String(order_nsu).trim(),
+              subscriptionPaymentNsu: String(transaction_nsu).trim(),
+              subscriptionId: matchedClient.pendingPlanId || 'plano-ouro',
+              subscriptionStartDate: new Date().toISOString(),
+            };
+
+            const patchRes = await fetch(patchUrl, {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ fields: toFirestoreFields(updateData) }),
+            });
+
+            if (patchRes.ok) {
+              console.log(`[Vercel Webhook] Cliente ${matchedClient.id} atualizado com sucesso para status: PROCESSED!`);
+            } else {
+              const patchErr = await patchRes.text();
+              console.warn('[Vercel Webhook] Falha ao atualizar cliente:', patchErr);
+            }
+          } else {
+            console.warn('[Vercel Webhook] Nenhum cliente encontrado para associar o pedido:', order_nsu);
+          }
+        }
+      } catch (clientErr: any) {
+        console.warn('[Vercel Webhook] Erro ao sincronizar cliente:', clientErr);
+      }
+
       console.log(`[Vercel Webhook] Sucesso! Pedido ${order_nsu} processado.`);
 
       return res.status(200).json({

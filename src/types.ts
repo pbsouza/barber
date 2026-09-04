@@ -10,7 +10,13 @@ export interface User {
   subscriptionId?: string; // If subscribed to a club plan
   subscriptionStartDate?: string;
   subscriptionOrderNsu?: string;
+  order_nsu?: string; // InfinitePay order_nsu identifier
   subscriptionPaymentNsu?: string;
+  status?: 'PROCESSED' | 'PENDING' | 'CANCELLED' | string; // User/Subscription status (PROCESSED gives access)
+  subscriptionStatus?: 'PROCESSED' | 'PENDING' | 'CANCELLED' | string;
+  pendingPlanId?: string;
+  pendingOrderNsu?: string;
+  lastCheckoutAt?: string;
   createdAt: string;
 }
 

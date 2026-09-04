@@ -127,6 +127,117 @@ async function startServer() {
         webhookEvents = webhookEvents.slice(0, 100);
       }
 
+      // Sync with Firestore REST API in background
+      (async () => {
+        try {
+          const FIREBASE_PROJECT_ID = 'gen-lang-client-0282193407';
+          const FIRESTORE_DB_ID = 'ai-studio-barbergestoagend-e7b915a6-e45b-4bcc-a26e-050a695dff1d';
+          const FIREBASE_API_KEY = 'AIzaSyC3GlZ-iIQiOPtW6WpzwRl1NQYGb_RfRl8';
+
+          // 1. Save webhook event
+          const eventFirestoreUrl = `https://firestore.googleapis.com/v1/projects/${FIREBASE_PROJECT_ID}/databases/${FIRESTORE_DB_ID}/documents/webhook_events?documentId=${newEvent.id}&key=${FIREBASE_API_KEY}`;
+          await fetch(eventFirestoreUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              fields: {
+                id: { stringValue: newEvent.id },
+                invoice_slug: { stringValue: newEvent.invoice_slug || '' },
+                order_nsu: { stringValue: newEvent.order_nsu },
+                paid_amount: { doubleValue: Number(newEvent.paid_amount) || 0 },
+                capture_method: { stringValue: newEvent.capture_method || '' },
+                transaction_nsu: { stringValue: newEvent.transaction_nsu || '' },
+                receipt_url: { stringValue: newEvent.transaction_nsu ? `https://recibo.infinitepay.io/${newEvent.transaction_nsu}` : '' },
+                status: { stringValue: 'PROCESSED' },
+                receivedAt: { stringValue: newEvent.receivedAt },
+                rawBody: { stringValue: JSON.stringify(payload) },
+              },
+            }),
+          });
+
+          // 2. Query users to find client and update with status: PROCESSED and order_nsu
+          const queryUrl = `https://firestore.googleapis.com/v1/projects/${FIREBASE_PROJECT_ID}/databases/${FIRESTORE_DB_ID}/documents:runQuery?key=${FIREBASE_API_KEY}`;
+          const queryRes = await fetch(queryUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              structuredQuery: { from: [{ collectionId: 'users' }] },
+            }),
+          });
+
+          if (queryRes.ok) {
+            const userResults = await queryRes.json();
+            const cleanOrderNsu = String(order_nsu || '').trim().toLowerCase();
+            const cleanTxNsu = String(transaction_nsu || '').trim().toLowerCase();
+
+            const userDocs = userResults
+              .map((item: any) => {
+                if (!item.document || !item.document.fields) return null;
+                const f = item.document.fields;
+                return {
+                  docName: item.document.name,
+                  id: f.id?.stringValue || '',
+                  role: f.role?.stringValue || 'CLIENT',
+                  pendingOrderNsu: f.pendingOrderNsu?.stringValue || '',
+                  subscriptionOrderNsu: f.subscriptionOrderNsu?.stringValue || '',
+                  order_nsu: f.order_nsu?.stringValue || '',
+                  pendingPlanId: f.pendingPlanId?.stringValue || 'plano-ouro',
+                  subscriptionStatus: f.subscriptionStatus?.stringValue || '',
+                  status: f.status?.stringValue || '',
+                  lastCheckoutAt: f.lastCheckoutAt?.stringValue || '',
+                };
+              })
+              .filter((u: any) => u !== null && u.role !== 'ADMIN');
+
+            let matched = userDocs.find((u: any) => {
+              const uId = (u.id || '').toLowerCase();
+              const pNsu = (u.pendingOrderNsu || '').toLowerCase();
+              const sNsu = (u.subscriptionOrderNsu || '').toLowerCase();
+              const oNsu = (u.order_nsu || '').toLowerCase();
+              return (
+                (cleanOrderNsu && (uId === cleanOrderNsu || pNsu === cleanOrderNsu || sNsu === cleanOrderNsu || oNsu === cleanOrderNsu)) ||
+                (cleanTxNsu && (pNsu === cleanTxNsu || sNsu === cleanTxNsu || oNsu === cleanTxNsu))
+              );
+            });
+
+            if (!matched) {
+              matched = userDocs.find((u: any) => {
+                const uId = (u.id || '').toLowerCase();
+                return cleanOrderNsu && uId && (cleanOrderNsu.includes(uId) || uId.includes(cleanOrderNsu));
+              });
+            }
+
+            if (!matched && userDocs.length > 0) {
+              const pendingClients = userDocs.filter(
+                (u: any) => u.subscriptionStatus === 'PENDING' || u.status === 'PENDING'
+              );
+              matched = pendingClients.length > 0 ? pendingClients[0] : userDocs[0];
+            }
+
+            if (matched) {
+              const patchUrl = `https://firestore.googleapis.com/v1/${matched.docName}?updateMask.fieldPaths=status&updateMask.fieldPaths=subscriptionStatus&updateMask.fieldPaths=order_nsu&updateMask.fieldPaths=subscriptionOrderNsu&updateMask.fieldPaths=subscriptionPaymentNsu&updateMask.fieldPaths=subscriptionId&updateMask.fieldPaths=subscriptionStartDate&key=${FIREBASE_API_KEY}`;
+              await fetch(patchUrl, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  fields: {
+                    status: { stringValue: 'PROCESSED' },
+                    subscriptionStatus: { stringValue: 'PROCESSED' },
+                    order_nsu: { stringValue: String(order_nsu).trim() },
+                    subscriptionOrderNsu: { stringValue: String(order_nsu).trim() },
+                    subscriptionPaymentNsu: { stringValue: String(transaction_nsu).trim() },
+                    subscriptionId: { stringValue: matched.pendingPlanId || 'plano-ouro' },
+                    subscriptionStartDate: { stringValue: new Date().toISOString() },
+                  },
+                }),
+              });
+            }
+          }
+        } catch (syncErr) {
+          console.warn('[Server] Falha ao sincronizar com Firestore:', syncErr);
+        }
+      })();
+
       // Return 200 OK to InfinitePay
       return res.status(200).json({
         success: true,

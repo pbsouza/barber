@@ -31,6 +31,8 @@ export const SubscriptionPlansModal: React.FC = () => {
     openAuthModal,
     infinitePayConfig,
     webhookEvents,
+    isUserSubscriber,
+    setUserPendingCheckout,
   } = useApp();
 
   const [selectedPlanForCheckout, setSelectedPlanForCheckout] = useState<SubscriptionPlan | null>(null);
@@ -74,6 +76,9 @@ export const SubscriptionPlansModal: React.FC = () => {
     setWebhookConfirmed(false);
     setVerificationError(null);
     setIsVerifying(false);
+
+    // Registra no Firestore que o cliente está com checkout pendente deste pedido e plano
+    setUserPendingCheckout(currentUser.id, plan.id, generatedNsu);
   };
 
   const handleConfirmDetectedPayment = async (ev: InfinitePayWebhookEvent) => {
@@ -206,12 +211,51 @@ export const SubscriptionPlansModal: React.FC = () => {
     closeSubscriptionModal,
   ]);
 
+  // Validação Instantânea pelo status: 'PROCESSED' do Firebase
+  // "O sistema vai comparar vai buscar por status: PROCESSED, libera acesso a assinatura. Senão não libera."
+  useEffect(() => {
+    if (!isSubscriptionModalOpen || !selectedPlanForCheckout || activationSuccess) return;
+
+    if (
+      isUserSubscriber(currentUser) &&
+      (currentUser?.status === 'PROCESSED' || currentUser?.subscriptionStatus === 'PROCESSED')
+    ) {
+      setWebhookConfirmed(true);
+      setActivationSuccess(true);
+      const timer = setTimeout(() => {
+        closeSubscriptionModal();
+        setSelectedPlanForCheckout(null);
+        setActivationSuccess(false);
+        setWebhookConfirmed(false);
+      }, 2000);
+      return () => clearTimeout(timer);
+    }
+  }, [
+    isSubscriptionModalOpen,
+    selectedPlanForCheckout,
+    activationSuccess,
+    currentUser?.status,
+    currentUser?.subscriptionStatus,
+    currentUser?.subscriptionId,
+    currentUser,
+    isUserSubscriber,
+    closeSubscriptionModal,
+  ]);
+
   // Only show active plans to clients
   const visiblePlans = (plans || []).filter((p) => p.isActive !== false);
 
-  const effectiveInfinitePayUrl = selectedPlanForCheckout
+  const rawUrl = selectedPlanForCheckout
     ? selectedPlanForCheckout.infinitePayUrl || infinitePayConfig.defaultUrl
     : infinitePayConfig.defaultUrl;
+
+  const effectiveInfinitePayUrl = useMemo(() => {
+    if (!rawUrl) return '';
+    const clean = rawUrl.trim();
+    if (!clean) return '';
+    const separator = clean.includes('?') ? '&' : '?';
+    return `${clean}${separator}order_nsu=${encodeURIComponent(orderNsu)}&custom_id=${encodeURIComponent(currentUser?.id || '')}`;
+  }, [rawUrl, orderNsu, currentUser?.id]);
 
   if (!isSubscriptionModalOpen) return null;
 
@@ -567,7 +611,7 @@ export const SubscriptionPlansModal: React.FC = () => {
             {/* Plans Grid */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
               {visiblePlans.map((plan) => {
-                const isUserActivePlan = currentUser?.subscriptionId === plan.id;
+                const isUserActivePlan = isUserSubscriber(currentUser) && currentUser?.subscriptionId === plan.id;
                 return (
                   <div
                     key={plan.id}
