@@ -53,6 +53,7 @@ export interface InfinitePayConfig {
 
 export interface InfinitePayWebhookEvent {
   id: string;
+  userId?: string;
   invoice_slug?: string;
   order_nsu: string;
   paid_amount?: number;

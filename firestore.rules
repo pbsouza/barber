@@ -46,13 +46,20 @@ service cloud.firestore {
       allow read, write: if true;
     }
 
-    // User Profiles
+    // User Profiles & isolated user webhook events
     match /users/{userId} {
       allow read, write: if true;
+
+      match /webhook_events/{eventId} {
+        allow read, write: if true;
+      }
     }
 
-    // InfinitePay Webhook Events & Confirmed Payments
+    // InfinitePay Webhook Events (Root & CollectionGroup)
     match /webhook_events/{eventId} {
+      allow read, write: if true;
+    }
+    match /{path=**}/webhook_events/{eventId} {
       allow read, write: if true;
     }
   }

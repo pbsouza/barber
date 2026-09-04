@@ -124,6 +124,7 @@
       "type": "object",
       "properties": {
         "id": { "type": "string" },
+        "userId": { "type": "string" },
         "invoice_slug": { "type": "string" },
         "order_nsu": { "type": "string" },
         "paid_amount": { "type": "number" },
@@ -139,6 +140,10 @@
     "/users/{userId}": {
       "schema": { "$ref": "#/entities/User" },
       "description": "Coleção de perfis de usuários e clientes"
+    },
+    "/users/{userId}/webhook_events/{eventId}": {
+      "schema": { "$ref": "#/entities/WebhookEvent" },
+      "description": "Eventos de webhook e pagamentos específicos do usuário cadastrado"
     },
     "/services/{serviceId}": {
       "schema": { "$ref": "#/entities/BarberService" },

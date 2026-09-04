@@ -135,6 +135,7 @@ export const AdminSubscriptionsView: React.FC = () => {
 
   // Webhook Simulator state
   const [isSimModalOpen, setIsSimModalOpen] = useState(false);
+  const [simUserId, setSimUserId] = useState('');
   const [simOrderNsu, setSimOrderNsu] = useState('');
   const [simPaidAmount, setSimPaidAmount] = useState('89.90');
   const [simCaptureMethod, setSimCaptureMethod] = useState<'credit_card' | 'pix'>('credit_card');
@@ -200,8 +201,18 @@ export const AdminSubscriptionsView: React.FC = () => {
     setIsSimulating(true);
     setSimFeedback(null);
 
+    // Identifica o usuário de destino para isolamento rigoroso
+    const matchedUser =
+      users.find((u) => u.id === simUserId) ||
+      users.find((u) => u.pendingOrderNsu && u.pendingOrderNsu.trim().toLowerCase() === simOrderNsu.trim().toLowerCase()) ||
+      users.find((u) => u.order_nsu && u.order_nsu.trim().toLowerCase() === simOrderNsu.trim().toLowerCase()) ||
+      users.find((u) => simOrderNsu.toLowerCase().includes(u.id.toLowerCase()));
+
+    const targetUserId = matchedUser?.id || simUserId || undefined;
+
     const testEvent: InfinitePayWebhookEvent = {
       id: `ev-${Date.now()}-${Math.floor(1000 + Math.random() * 9000)}`,
+      userId: targetUserId,
       invoice_slug: simInvoiceSlug.trim() || `inv_sim_${Math.floor(100000 + Math.random() * 900000)}`,
       order_nsu: simOrderNsu.trim(),
       paid_amount: parseFloat(simPaidAmount.replace(',', '.')) || 89.9,
@@ -210,6 +221,7 @@ export const AdminSubscriptionsView: React.FC = () => {
       receivedAt: new Date().toISOString(),
       status: 'PROCESSED',
       rawBody: {
+        userId: targetUserId,
         invoice_slug: simInvoiceSlug.trim() || `inv_sim_${Date.now()}`,
         order_nsu: simOrderNsu.trim(),
         paid_amount: parseFloat(simPaidAmount.replace(',', '.')) || 89.9,
@@ -220,8 +232,8 @@ export const AdminSubscriptionsView: React.FC = () => {
     };
 
     try {
-      // 1. Record event directly into Firebase Firestore!
-      await recordWebhookEvent(testEvent);
+      // 1. Grava no subcollection /users/{userId}/webhook_events e no ledger central
+      await recordWebhookEvent(testEvent, targetUserId);
 
       // 2. Also forward safely to configured server endpoint if reachable
       try {
@@ -236,7 +248,7 @@ export const AdminSubscriptionsView: React.FC = () => {
 
       setSimFeedback({
         type: 'success',
-        message: `Webhook simulado com sucesso (HTTP 200)! Evento gravado no Firebase Firestore (Pedido: "${testEvent.order_nsu}", Transação: "${testEvent.transaction_nsu}"). Sincronização em tempo real ativa.`,
+        message: `Webhook simulado com sucesso! Evento gravado no subcollection do cliente (${targetUserId || 'auto-detectado'}) com status: PROCESSED e order_nsu: "${testEvent.order_nsu}".`,
       });
 
       setTimeout(() => {
@@ -872,6 +884,7 @@ export const AdminSubscriptionsView: React.FC = () => {
                 <thead>
                   <tr className="border-b border-slate-800 text-slate-400">
                     <th className="pb-2.5 font-semibold">Data / Hora</th>
+                    <th className="pb-2.5 font-semibold">Cliente Destinatário</th>
                     <th className="pb-2.5 font-semibold">Order NSU</th>
                     <th className="pb-2.5 font-semibold">Transaction NSU</th>
                     <th className="pb-2.5 font-semibold">Forma</th>
@@ -881,29 +894,47 @@ export const AdminSubscriptionsView: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-800/60">
-                  {displayWebhookEvents.map((ev) => (
-                    <tr key={ev.id} className="hover:bg-slate-900/40 transition">
-                      <td className="py-2.5 font-mono text-[11px] text-slate-400">
-                        {new Date(ev.receivedAt).toLocaleTimeString('pt-BR')}
-                        <span className="text-[10px] text-slate-500 block">
-                          {new Date(ev.receivedAt).toLocaleDateString('pt-BR')}
-                        </span>
-                      </td>
-                      <td className="py-2.5 font-mono text-cyan-300 font-bold">
-                        <div className="flex items-center gap-1.5">
-                          <span className="truncate max-w-[120px] select-all" title={ev.order_nsu}>
-                            {ev.order_nsu}
+                  {displayWebhookEvents.map((ev) => {
+                    const matchedClient = ev.userId ? users.find((u) => u.id === ev.userId) : null;
+                    return (
+                      <tr key={ev.id} className="hover:bg-slate-900/40 transition">
+                        <td className="py-2.5 font-mono text-[11px] text-slate-400">
+                          {new Date(ev.receivedAt).toLocaleTimeString('pt-BR')}
+                          <span className="text-[10px] text-slate-500 block">
+                            {new Date(ev.receivedAt).toLocaleDateString('pt-BR')}
                           </span>
-                          <button
-                            type="button"
-                            onClick={() => navigator.clipboard.writeText(ev.order_nsu)}
-                            className="p-1 rounded hover:bg-slate-800 text-slate-400 hover:text-cyan-300 transition"
-                            title="Copiar Order NSU"
-                          >
-                            <Copy className="w-3 h-3" />
-                          </button>
-                        </div>
-                      </td>
+                        </td>
+                        <td className="py-2.5 text-slate-300">
+                          {matchedClient ? (
+                            <div>
+                              <span className="font-bold text-white text-xs block truncate max-w-[130px]">
+                                {matchedClient.name}
+                              </span>
+                              <span className="text-[10px] text-cyan-400 font-mono block truncate max-w-[130px]">
+                                {matchedClient.id}
+                              </span>
+                            </div>
+                          ) : ev.userId ? (
+                            <span className="font-mono text-cyan-400 text-[11px]">{ev.userId}</span>
+                          ) : (
+                            <span className="text-slate-500 text-[11px] italic">Não associado</span>
+                          )}
+                        </td>
+                        <td className="py-2.5 font-mono text-cyan-300 font-bold">
+                          <div className="flex items-center gap-1.5">
+                            <span className="truncate max-w-[120px] select-all" title={ev.order_nsu}>
+                              {ev.order_nsu}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => navigator.clipboard.writeText(ev.order_nsu)}
+                              className="p-1 rounded hover:bg-slate-800 text-slate-400 hover:text-cyan-300 transition"
+                              title="Copiar Order NSU"
+                            >
+                              <Copy className="w-3 h-3" />
+                            </button>
+                          </div>
+                        </td>
                       <td className="py-2.5 font-mono text-slate-300">
                         <div className="flex items-center gap-1.5">
                           <span className="truncate max-w-[120px] select-all" title={ev.transaction_nsu || ''}>
@@ -971,8 +1002,9 @@ export const AdminSubscriptionsView: React.FC = () => {
                         </button>
                       </td>
                     </tr>
-                  ))}
-                </tbody>
+                  );
+                })}
+              </tbody>
               </table>
             </div>
           )}
@@ -1575,6 +1607,40 @@ export const AdminSubscriptionsView: React.FC = () => {
             )}
 
             <form onSubmit={handleSimulateWebhook} className="space-y-3 text-xs">
+              <div>
+                <label className="block text-slate-300 font-bold mb-1">
+                  Cliente Específico (Isolamento de Webhook por Usuário)
+                </label>
+                <select
+                  value={simUserId}
+                  onChange={(e) => {
+                    const chosenId = e.target.value;
+                    setSimUserId(chosenId);
+                    const sel = users.find((u) => u.id === chosenId);
+                    if (sel?.pendingOrderNsu) {
+                      setSimOrderNsu(sel.pendingOrderNsu);
+                    } else if (sel?.order_nsu) {
+                      setSimOrderNsu(sel.order_nsu);
+                    } else if (chosenId) {
+                      setSimOrderNsu(`ORD_${chosenId}_${Date.now().toString(36)}`);
+                    }
+                  }}
+                  className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-cyan-500"
+                >
+                  <option value="">-- Detectar automaticamente ou usuário avulso --</option>
+                  {users
+                    .filter((u) => u.role !== 'ADMIN')
+                    .map((u) => (
+                      <option key={u.id} value={u.id}>
+                        {u.name} ({u.id}) {u.pendingOrderNsu ? `[Pendente: ${u.pendingOrderNsu}]` : ''}
+                      </option>
+                    ))}
+                </select>
+                <p className="text-[10px] text-slate-500 mt-1">
+                  Ao escolher um cliente, o webhook é gravado exclusivamente na subcoleção dele <code className="text-cyan-400">/users/{'{userId}'}/webhook_events</code>.
+                </p>
+              </div>
+
               <div>
                 <label className="block text-slate-300 font-bold mb-1">
                   order_nsu (Número do Pedido / Identificador da Assinatura) *

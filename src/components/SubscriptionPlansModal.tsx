@@ -46,18 +46,31 @@ export const SubscriptionPlansModal: React.FC = () => {
   const [activationSuccess, setActivationSuccess] = useState(false);
   const [webhookConfirmed, setWebhookConfirmed] = useState(false);
 
-  // Find recent webhook event received in the last 2 hours from Firestore
+  // Find recent webhook event for THIS specific user matching orderNsu or pendingOrderNsu
   const recentWebhookEvent = useMemo(() => {
-    if (!webhookEvents || webhookEvents.length === 0) return null;
-    const now = Date.now();
+    if (!webhookEvents || webhookEvents.length === 0 || !currentUser) return null;
+    const cleanOrderNsu = (orderNsu || currentUser.pendingOrderNsu || currentUser.order_nsu || '').trim().toLowerCase();
+    const cleanUserId = currentUser.id.toLowerCase();
+
     return (
       webhookEvents.find((ev) => {
         if (ev.status !== 'PROCESSED' && (ev.status as string) !== 'APPROVED') return false;
-        const eventTime = new Date(ev.receivedAt || 0).getTime();
-        return now - eventTime < 2 * 60 * 60 * 1000;
+        // Garante estritamente que pertence a este usuário
+        if (ev.userId && ev.userId.toLowerCase() !== cleanUserId) return false;
+
+        const evOrderNsu = (ev.order_nsu || '').trim().toLowerCase();
+        const evTxNsu = (ev.transaction_nsu || '').trim().toLowerCase();
+
+        if (cleanOrderNsu && (evOrderNsu === cleanOrderNsu || evTxNsu === cleanOrderNsu || evOrderNsu.includes(cleanOrderNsu) || cleanOrderNsu.includes(evOrderNsu))) {
+          return true;
+        }
+        if (evOrderNsu.includes(cleanUserId)) {
+          return true;
+        }
+        return false;
       }) || null
     );
-  }, [webhookEvents]);
+  }, [webhookEvents, currentUser, orderNsu]);
 
   const handleSelectPlan = (plan: SubscriptionPlan) => {
     if (!currentUser) {
@@ -66,7 +79,8 @@ export const SubscriptionPlansModal: React.FC = () => {
       return;
     }
 
-    const generatedNsu = `SUB-${currentUser.id.replace(/\D/g, '').slice(-4) || 'CLI'}-${Date.now().toString().slice(-6)}`;
+    // NSU único codificado com o ID do usuário cadastrado para rastreio unívoco
+    const generatedNsu = `ORD_${currentUser.id}_${Date.now().toString(36)}`;
     setOrderNsu(generatedNsu);
     setManualReceiptNsu('');
     setSelectedPlanForCheckout(plan);

@@ -111,55 +111,10 @@ export default async function handler(req: any, res: any) {
 
       const eventId = `ev_${Date.now()}_${Math.floor(1000 + Math.random() * 9000)}`;
 
-      const eventData = {
-        id: eventId,
-        invoice_slug: String(invoice_slug),
-        order_nsu: String(order_nsu).trim(),
-        paid_amount: paid_amount,
-        capture_method: String(capture_method),
-        transaction_nsu: String(transaction_nsu),
-        receipt_url: String(receipt_url),
-        status: 'PROCESSED',
-        receivedAt: new Date().toISOString(),
-        rawBody: JSON.stringify(payload),
-      };
+      // Identificação estrita do cliente
+      let matchedClient: any = null;
+      let resolvedUserId = 'UNASSIGNED';
 
-      // 1. Grava diretamente no Firebase Firestore via REST
-      const firestoreUrl = `https://firestore.googleapis.com/v1/projects/${FIREBASE_PROJECT_ID}/databases/${FIRESTORE_DB_ID}/documents/webhook_events?documentId=${eventId}&key=${FIREBASE_API_KEY}`;
-      
-      const firestoreRes = await fetch(firestoreUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fields: toFirestoreFields(eventData) }),
-      });
-
-      if (!firestoreRes.ok) {
-        const errText = await firestoreRes.text();
-        console.error('[Vercel Webhook] Erro ao salvar no Firestore:', errText);
-      }
-
-      // 2. Registra automaticamente entrada financeira no caixa da barbearia
-      if (paid_amount > 0) {
-        const transUrl = `https://firestore.googleapis.com/v1/projects/${FIREBASE_PROJECT_ID}/databases/${FIRESTORE_DB_ID}/documents/transactions?documentId=trans_${eventId}&key=${FIREBASE_API_KEY}`;
-        const transData = {
-          id: `trans_${eventId}`,
-          type: 'ENTRADA',
-          description: `Assinatura InfinitePay: ${order_nsu} (${capture_method})`,
-          amount: paid_amount,
-          paymentMethod: String(capture_method).toLowerCase().includes('pix') ? 'PIX' : 'CARTAO_CREDITO',
-          category: 'ASSINATURA',
-          date: new Date().toISOString(),
-          createdByName: 'Webhook InfinitePay (Vercel)',
-        };
-
-        await fetch(transUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ fields: toFirestoreFields(transData) }),
-        }).catch((e) => console.warn('[Vercel Webhook] Falha ao registrar caixa:', e));
-      }
-
-      // 3. Atualiza o cliente específico no Firestore com status: PROCESSED e order_nsu
       try {
         const queryUrl = `https://firestore.googleapis.com/v1/projects/${FIREBASE_PROJECT_ID}/databases/${FIRESTORE_DB_ID}/documents:runQuery?key=${FIREBASE_API_KEY}`;
         const queryRes = await fetch(queryUrl, {
@@ -176,6 +131,13 @@ export default async function handler(req: any, res: any) {
           const userResults = await queryRes.json();
           const cleanOrderNsu = String(order_nsu || '').trim().toLowerCase();
           const cleanTxNsu = String(transaction_nsu || '').trim().toLowerCase();
+          const explicitUserId = String(
+            payload.userId ||
+            payload.custom_id ||
+            payload.client_id ||
+            (payload.metadata && payload.metadata.userId) ||
+            ''
+          ).trim().toLowerCase();
 
           const parseUserDoc = (item: any) => {
             if (!item.document || !item.document.fields) return null;
@@ -208,75 +170,137 @@ export default async function handler(req: any, res: any) {
             .map(parseUserDoc)
             .filter((u: any) => u !== null && u.role !== 'ADMIN');
 
-          // Match client:
-          // A. By order_nsu or transaction_nsu
-          let matchedClient = userDocs.find((u: any) => {
-            const uId = (u.id || '').toLowerCase();
-            const pNsu = (u.pendingOrderNsu || '').toLowerCase();
-            const sNsu = (u.subscriptionOrderNsu || '').toLowerCase();
-            const oNsu = (u.order_nsu || '').toLowerCase();
+          // 1. Identifica por ID explícito
+          if (explicitUserId) {
+            matchedClient = userDocs.find((u: any) => (u.id || '').toLowerCase() === explicitUserId);
+          }
 
-            return (
-              (cleanOrderNsu && (uId === cleanOrderNsu || pNsu === cleanOrderNsu || sNsu === cleanOrderNsu || oNsu === cleanOrderNsu)) ||
-              (cleanTxNsu && (pNsu === cleanTxNsu || sNsu === cleanTxNsu || oNsu === cleanTxNsu))
-            );
-          });
-
-          // B. Partial match if order_nsu contains user ID or vice-versa
-          if (!matchedClient) {
+          // 2. Identifica por order_nsu ou pendingOrderNsu exato
+          if (!matchedClient && cleanOrderNsu) {
             matchedClient = userDocs.find((u: any) => {
               const uId = (u.id || '').toLowerCase();
-              return cleanOrderNsu && uId && (cleanOrderNsu.includes(uId) || uId.includes(cleanOrderNsu));
-            });
-          }
+              const pNsu = (u.pendingOrderNsu || '').toLowerCase();
+              const sNsu = (u.subscriptionOrderNsu || '').toLowerCase();
+              const oNsu = (u.order_nsu || '').toLowerCase();
 
-          // C. Fallback: Find client with PENDING status or most recent checkout
-          if (!matchedClient && userDocs.length > 0) {
-            const pendingClients = userDocs.filter(
-              (u: any) => u.subscriptionStatus === 'PENDING' || u.status === 'PENDING'
-            );
-            if (pendingClients.length > 0) {
-              pendingClients.sort(
-                (a: any, b: any) => new Date(b.lastCheckoutAt || 0).getTime() - new Date(a.lastCheckoutAt || 0).getTime()
+              return (
+                cleanOrderNsu &&
+                (uId === cleanOrderNsu || pNsu === cleanOrderNsu || sNsu === cleanOrderNsu || oNsu === cleanOrderNsu)
               );
-              matchedClient = pendingClients[0];
-            } else {
-              matchedClient = userDocs[0];
-            }
+            });
           }
 
-          if (matchedClient) {
-            const targetDocName = matchedClient.docName;
-            const patchUrl = `https://firestore.googleapis.com/v1/${targetDocName}?updateMask.fieldPaths=status&updateMask.fieldPaths=subscriptionStatus&updateMask.fieldPaths=order_nsu&updateMask.fieldPaths=subscriptionOrderNsu&updateMask.fieldPaths=subscriptionPaymentNsu&updateMask.fieldPaths=subscriptionId&updateMask.fieldPaths=subscriptionStartDate&key=${FIREBASE_API_KEY}`;
-
-            const updateData = {
-              status: 'PROCESSED',
-              subscriptionStatus: 'PROCESSED',
-              order_nsu: String(order_nsu).trim(),
-              subscriptionOrderNsu: String(order_nsu).trim(),
-              subscriptionPaymentNsu: String(transaction_nsu).trim(),
-              subscriptionId: matchedClient.pendingPlanId || 'plano-ouro',
-              subscriptionStartDate: new Date().toISOString(),
-            };
-
-            const patchRes = await fetch(patchUrl, {
-              method: 'PATCH',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ fields: toFirestoreFields(updateData) }),
+          // 3. Identifica se o order_nsu contém o ID do usuário (ex: ORD_{userId}_... ou SUB_{userId}_...)
+          if (!matchedClient && cleanOrderNsu) {
+            matchedClient = userDocs.find((u: any) => {
+              const uId = (u.id || '').toLowerCase();
+              return (
+                uId &&
+                (cleanOrderNsu.startsWith(`ord_${uId}_`) ||
+                  cleanOrderNsu.startsWith(`sub_${uId}_`) ||
+                  cleanOrderNsu.startsWith(`ord_${uId}`) ||
+                  cleanOrderNsu.startsWith(`sub_${uId}`) ||
+                  cleanOrderNsu.includes(uId))
+              );
             });
+          }
 
-            if (patchRes.ok) {
-              console.log(`[Vercel Webhook] Cliente ${matchedClient.id} atualizado com sucesso para status: PROCESSED!`);
-            } else {
-              const patchErr = await patchRes.text();
-              console.warn('[Vercel Webhook] Falha ao atualizar cliente:', patchErr);
-            }
-          } else {
-            console.warn('[Vercel Webhook] Nenhum cliente encontrado para associar o pedido:', order_nsu);
+          // 4. Identifica por transaction_nsu
+          if (!matchedClient && cleanTxNsu) {
+            matchedClient = userDocs.find((u: any) => {
+              const pNsu = (u.pendingOrderNsu || '').toLowerCase();
+              const sNsu = (u.subscriptionOrderNsu || '').toLowerCase();
+              const oNsu = (u.order_nsu || '').toLowerCase();
+              return cleanTxNsu && (pNsu === cleanTxNsu || sNsu === cleanTxNsu || oNsu === cleanTxNsu);
+            });
           }
         }
-      } catch (clientErr: any) {
-        console.warn('[Vercel Webhook] Erro ao sincronizar cliente:', clientErr);
+      } catch (err) {
+        console.warn('[Vercel Webhook] Erro ao buscar usuários no Firestore:', err);
+      }
+
+      if (matchedClient) {
+        resolvedUserId = matchedClient.id;
+      }
+
+      const eventData = {
+        id: eventId,
+        userId: resolvedUserId,
+        invoice_slug: String(invoice_slug),
+        order_nsu: String(order_nsu).trim(),
+        paid_amount: paid_amount,
+        capture_method: String(capture_method),
+        transaction_nsu: String(transaction_nsu),
+        receipt_url: String(receipt_url),
+        status: 'PROCESSED',
+        receivedAt: new Date().toISOString(),
+        rawBody: JSON.stringify(payload),
+      };
+
+      // 1. Grava no subcollection do usuário específico: /users/{userId}/webhook_events/{eventId}
+      if (matchedClient) {
+        const userEventUrl = `https://firestore.googleapis.com/v1/projects/${FIREBASE_PROJECT_ID}/databases/${FIRESTORE_DB_ID}/documents/users/${matchedClient.id}/webhook_events?documentId=${eventId}&key=${FIREBASE_API_KEY}`;
+        await fetch(userEventUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ fields: toFirestoreFields(eventData) }),
+        }).catch((e) => console.warn('[Vercel Webhook] Falha ao salvar no subcollection do usuário:', e));
+
+        // 2. Atualiza o documento do cliente específico com status: PROCESSED e order_nsu
+        const patchUrl = `https://firestore.googleapis.com/v1/${matchedClient.docName}?updateMask.fieldPaths=status&updateMask.fieldPaths=subscriptionStatus&updateMask.fieldPaths=order_nsu&updateMask.fieldPaths=subscriptionOrderNsu&updateMask.fieldPaths=subscriptionPaymentNsu&updateMask.fieldPaths=subscriptionId&updateMask.fieldPaths=subscriptionStartDate&key=${FIREBASE_API_KEY}`;
+        const updateData = {
+          status: 'PROCESSED',
+          subscriptionStatus: 'PROCESSED',
+          order_nsu: String(order_nsu).trim(),
+          subscriptionOrderNsu: String(order_nsu).trim(),
+          subscriptionPaymentNsu: String(transaction_nsu).trim(),
+          subscriptionId: matchedClient.pendingPlanId || 'plano-ouro',
+          subscriptionStartDate: new Date().toISOString(),
+        };
+
+        const patchRes = await fetch(patchUrl, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ fields: toFirestoreFields(updateData) }),
+        });
+
+        if (patchRes.ok) {
+          console.log(`[Vercel Webhook] Cliente ${matchedClient.id} atualizado com sucesso para status: PROCESSED!`);
+        } else {
+          const patchErr = await patchRes.text();
+          console.warn('[Vercel Webhook] Falha ao atualizar cliente:', patchErr);
+        }
+      } else {
+        console.warn(`[Vercel Webhook Alerta] Pedido "${order_nsu}" não pertence a nenhum usuário cadastrado. Nenhuma assinatura de terceiros foi ativada.`);
+      }
+
+      // 3. Grava também no log central de webhook_events para o painel de administração
+      const firestoreUrl = `https://firestore.googleapis.com/v1/projects/${FIREBASE_PROJECT_ID}/databases/${FIRESTORE_DB_ID}/documents/webhook_events?documentId=${eventId}&key=${FIREBASE_API_KEY}`;
+      await fetch(firestoreUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fields: toFirestoreFields(eventData) }),
+      }).catch((e) => console.warn('[Vercel Webhook] Falha ao registrar log central de webhook:', e));
+
+      // 4. Registra automaticamente entrada financeira no caixa da barbearia
+      if (paid_amount > 0) {
+        const transUrl = `https://firestore.googleapis.com/v1/projects/${FIREBASE_PROJECT_ID}/databases/${FIRESTORE_DB_ID}/documents/transactions?documentId=trans_${eventId}&key=${FIREBASE_API_KEY}`;
+        const transData = {
+          id: `trans_${eventId}`,
+          type: 'ENTRADA',
+          description: `Assinatura InfinitePay: ${order_nsu} (${capture_method})`,
+          amount: paid_amount,
+          paymentMethod: String(capture_method).toLowerCase().includes('pix') ? 'PIX' : 'CARTAO_CREDITO',
+          category: 'ASSINATURA',
+          date: new Date().toISOString(),
+          createdByName: 'Webhook InfinitePay (Vercel)',
+        };
+
+        await fetch(transUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ fields: toFirestoreFields(transData) }),
+        }).catch((e) => console.warn('[Vercel Webhook] Falha ao registrar caixa:', e));
       }
 
       console.log(`[Vercel Webhook] Sucesso! Pedido ${order_nsu} processado.`);

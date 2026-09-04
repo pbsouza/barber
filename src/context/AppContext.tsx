@@ -98,7 +98,7 @@ interface AppContextType {
   infinitePayConfig: InfinitePayConfig;
   updateInfinitePayConfig: (config: Partial<InfinitePayConfig>) => Promise<void>;
   webhookEvents: InfinitePayWebhookEvent[];
-  recordWebhookEvent: (event: InfinitePayWebhookEvent) => Promise<void>;
+  recordWebhookEvent: (event: InfinitePayWebhookEvent, targetUserId?: string) => Promise<void>;
   clearWebhookEvents: () => Promise<void>;
   verifyPaymentForOrder: (orderNsu: string, expectedAmount?: number) => Promise<{ paid: boolean; event?: InfinitePayWebhookEvent; message?: string }>;
 
@@ -395,17 +395,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       (err) => console.warn('[Firebase] Erro ao sincronizar usuários:', err.message)
     );
 
-    // 8. Sync Webhook Events
-    const unsubWebhooks = onSnapshot(
-      collection(db, 'webhook_events'),
-      (snapshot) => {
-        const list = snapshot.docs.map((d) => d.data() as InfinitePayWebhookEvent);
-        list.sort((a, b) => new Date(b.receivedAt).getTime() - new Date(a.receivedAt).getTime());
-        setWebhookEvents(list);
-      },
-      (err) => console.warn('[Firebase] Erro ao sincronizar webhook_events:', err.message)
-    );
-
     return () => {
       unsubServices();
       unsubPlans();
@@ -415,9 +404,45 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       unsubAbsences();
       unsubTransactions();
       unsubUsers();
-      unsubWebhooks();
     };
   }, []);
+
+  // 8. Sincronização isolada de Webhook Events por Usuário:
+  // "O webhook_events tem que ficar dentro do user cadastrado. Por exemplo, user 1 registra o webhook do user 1, user 2 registra o webhook do user 2..."
+  useEffect(() => {
+    if (!currentUser) {
+      setWebhookEvents([]);
+      return;
+    }
+
+    if (currentUser.role === 'ADMIN') {
+      // O Administrador escuta o ledger geral de webhooks para visualização e auditoria
+      const unsub = onSnapshot(
+        collection(db, 'webhook_events'),
+        (snapshot) => {
+          const list = snapshot.docs.map((d) => d.data() as InfinitePayWebhookEvent);
+          list.sort((a, b) => new Date(b.receivedAt).getTime() - new Date(a.receivedAt).getTime());
+          setWebhookEvents(list);
+        },
+        (err) => console.warn('[Firebase] Erro ao sincronizar webhook_events globais (admin):', err.message)
+      );
+      return () => unsub();
+    } else {
+      // O CLIENTE escuta EXCLUSIVAMENTE a sua própria subcoleção: /users/{userId}/webhook_events
+      // Isso impede 100% que dados de um cliente ativem ou sejam consumidos por outro cliente
+      const userWebhooksRef = collection(db, 'users', currentUser.id, 'webhook_events');
+      const unsub = onSnapshot(
+        userWebhooksRef,
+        (snapshot) => {
+          const list = snapshot.docs.map((d) => d.data() as InfinitePayWebhookEvent);
+          list.sort((a, b) => new Date(b.receivedAt).getTime() - new Date(a.receivedAt).getTime());
+          setWebhookEvents(list);
+        },
+        (err) => console.warn(`[Firebase] Erro ao sincronizar webhook_events do usuário ${currentUser.id}:`, err.message)
+      );
+      return () => unsub();
+    }
+  }, [currentUser?.id, currentUser?.role]);
 
   // Sync state to localStorage for offline cache
   useEffect(() => {
@@ -869,6 +894,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return;
     }
 
+    // 1. Verificação instantânea do documento do próprio cliente:
+    // "no campo status, grava também naquele cliente específico o mesmo status e a orde_nsu. Assim a validação vai ser instantâneo. O sistema vai comparar vai buscar por status: PROCESSED, libera acesso a assinatura."
+    if (
+      currentUser.status === 'PROCESSED' ||
+      currentUser.subscriptionStatus === 'PROCESSED'
+    ) {
+      const planToActivate = currentUser.pendingPlanId || currentUser.subscriptionId || 'plano-ouro';
+      const matchedOrderNsu = currentUser.order_nsu || currentUser.subscriptionOrderNsu || currentUser.pendingOrderNsu || '';
+      console.log(`[AppContext] Cliente ${currentUser.id} detectado com status: PROCESSED no Firestore! Liberando acesso à assinatura instantaneamente...`);
+      subscribeUserToPlan(currentUser.id, planToActivate, {
+        orderNsu: matchedOrderNsu,
+        transactionNsu: currentUser.subscriptionPaymentNsu || '',
+        paymentMethod: 'PIX',
+      });
+      return;
+    }
+
+    // 2. Verificação nos eventos de webhook isolados do próprio usuário:
+    // "O webhook_events tem que ficar dentro do user cadastrado. Por exemplo, user 1 registra o webhook do user 1, user 2 registra o webhook do user 2..."
     const pendingNsu = (
       currentUser.pendingOrderNsu ||
       currentUser.order_nsu ||
@@ -878,30 +922,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const cleanUserId = currentUser.id.toLowerCase().trim();
     const pendingPlan = currentUser.pendingPlanId || 'plano-ouro';
 
-    // Procura evento com status: 'PROCESSED' correspondente
     const matchingProcessedEvent = webhookEvents.find((ev) => {
       if (ev.status !== 'PROCESSED' && (ev.status as string) !== 'APPROVED') return false;
+      // Garante estritamente que não é de outro usuário caso tenha ID
+      if (ev.userId && ev.userId.toLowerCase() !== cleanUserId) return false;
+
       const evOrderNsu = (ev.order_nsu || '').toLowerCase().trim();
       const evTxNsu = (ev.transaction_nsu || '').toLowerCase().trim();
 
-      if (pendingNsu && (evOrderNsu.includes(pendingNsu) || pendingNsu.includes(evOrderNsu) || evTxNsu.includes(pendingNsu))) {
+      if (pendingNsu && (evOrderNsu === pendingNsu || evOrderNsu.includes(pendingNsu) || pendingNsu.includes(evOrderNsu) || evTxNsu === pendingNsu)) {
         return true;
       }
       if (cleanUserId && (evOrderNsu.includes(cleanUserId) || cleanUserId.includes(evOrderNsu))) {
         return true;
       }
-
-      if (currentUser.status === 'PENDING' || currentUser.subscriptionStatus === 'PENDING') {
-        const timeDiff = Date.now() - new Date(ev.receivedAt || 0).getTime();
-        if (timeDiff < 2 * 60 * 60 * 1000) {
-          return true;
-        }
-      }
       return false;
     });
 
     if (matchingProcessedEvent) {
-      console.log('[AppContext] Webhook PROCESSED detectado instantaneamente! Ativando assinatura do cliente:', matchingProcessedEvent);
+      console.log(`[AppContext] Webhook PROCESSED detectado no subcollection do usuário ${currentUser.id}! Ativando assinatura:`, matchingProcessedEvent);
       subscribeUserToPlan(currentUser.id, pendingPlan, {
         orderNsu: matchingProcessedEvent.order_nsu,
         transactionNsu: matchingProcessedEvent.transaction_nsu,
@@ -910,25 +949,60 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   }, [currentUser, webhookEvents, subscribeUserToPlan]);
 
-  const recordWebhookEvent = useCallback(async (event: InfinitePayWebhookEvent) => {
-    setWebhookEvents((prev) => [event, ...prev.filter((e) => e.id !== event.id)]);
-    try {
-      await setDoc(doc(db, 'webhook_events', event.id), event);
-    } catch (err) {
-      console.error('[Firebase] Erro ao gravar webhook_events:', err);
-    }
-  }, []);
+  const recordWebhookEvent = useCallback(
+    async (event: InfinitePayWebhookEvent, targetUserId?: string) => {
+      const destUserId = targetUserId || event.userId || currentUser?.id;
+      const enrichedEvent: InfinitePayWebhookEvent = {
+        ...event,
+        userId: destUserId,
+      };
+
+      setWebhookEvents((prev) => [enrichedEvent, ...prev.filter((e) => e.id !== enrichedEvent.id)]);
+
+      try {
+        if (destUserId) {
+          // 1. Grava no subcollection do usuário específico: /users/{userId}/webhook_events/{eventId}
+          await setDoc(doc(db, 'users', destUserId, 'webhook_events', enrichedEvent.id), enrichedEvent);
+
+          // 2. Grava status: PROCESSED e order_nsu naquele cliente específico no Firestore para liberação instantânea
+          if (enrichedEvent.status === 'PROCESSED' || (enrichedEvent.status as string) === 'APPROVED') {
+            await updateDoc(doc(db, 'users', destUserId), {
+              status: 'PROCESSED',
+              subscriptionStatus: 'PROCESSED',
+              order_nsu: enrichedEvent.order_nsu,
+              subscriptionOrderNsu: enrichedEvent.order_nsu,
+              subscriptionPaymentNsu: enrichedEvent.transaction_nsu || '',
+              subscriptionStartDate: new Date().toISOString(),
+            }).catch(console.warn);
+          }
+        }
+
+        // 3. Grava também no ledger central para o painel de auditoria do administrador
+        await setDoc(doc(db, 'webhook_events', enrichedEvent.id), enrichedEvent);
+      } catch (err) {
+        console.error('[Firebase] Erro ao gravar webhook_events:', err);
+      }
+    },
+    [currentUser]
+  );
 
   const clearWebhookEvents = useCallback(async () => {
     setWebhookEvents([]);
     try {
-      const snap = await getDocs(collection(db, 'webhook_events'));
-      const deletes = snap.docs.map((d) => deleteDoc(d.ref));
-      await Promise.all(deletes);
+      if (currentUser?.id) {
+        const userSnap = await getDocs(collection(db, 'users', currentUser.id, 'webhook_events'));
+        const userDeletes = userSnap.docs.map((d) => deleteDoc(d.ref));
+        await Promise.all(userDeletes);
+      }
+      if (currentUser?.role === 'ADMIN') {
+        const snap = await getDocs(collection(db, 'webhook_events'));
+        const deletes = snap.docs.map((d) => deleteDoc(d.ref));
+        await Promise.all(deletes);
+      }
     } catch (err) {
       console.error('[Firebase] Erro ao limpar webhook_events:', err);
     }
-  }, []);
+  }, [currentUser]);
 
   const verifyPaymentForOrder = useCallback(
     async (orderNsu: string, expectedAmount?: number): Promise<{ paid: boolean; event?: InfinitePayWebhookEvent; message?: string }> => {
@@ -942,9 +1016,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
       }
 
-      // Helper to check if an event matches the search criteria
+      // Helper to check if an event strictly matches the current user & order
       const isMatch = (ev: InfinitePayWebhookEvent) => {
         if (ev.status !== 'PROCESSED' && (ev.status as string) !== 'APPROVED') return false;
+
+        // Se o evento possui userId e currentUser está logado como cliente, rejeita se pertencer a outro
+        if (currentUser && ev.userId && ev.userId !== currentUser.id && currentUser.role !== 'ADMIN') {
+          return false;
+        }
 
         const orderNsuField = (ev.order_nsu || '').toLowerCase();
         const txNsuField = (ev.transaction_nsu || '').toLowerCase();
@@ -975,66 +1054,47 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           }
         }
 
+        // 3. Se o NSU do pedido contiver o ID deste usuário
+        if (currentUser?.id && orderNsuField.includes(currentUser.id.toLowerCase())) {
+          return true;
+        }
+
         return false;
       };
 
-      // 1. Check in-memory/real-time Firestore webhook events
+      // 1. Verifica eventos em memória (que para o cliente já são estritamente os da sua própria subcoleção)
       const localMatched = webhookEvents.find(isMatch);
       if (localMatched) {
         return { paid: true, event: localMatched };
       }
 
-      // 2. Direct Firestore query in collection 'webhook_events' to ensure latest data
+      // 2. Consulta direta à subcoleção do próprio usuário no Firestore
       try {
-        const snap = await getDocs(collection(db, 'webhook_events'));
-        const allEvents = snap.docs.map((d) => d.data() as InfinitePayWebhookEvent);
-        // Sort most recent first
-        allEvents.sort((a, b) => new Date(b.receivedAt || 0).getTime() - new Date(a.receivedAt || 0).getTime());
-
-        const matchedDoc = allEvents.find(isMatch);
-        if (matchedDoc) {
-          return { paid: true, event: matchedDoc };
-        }
-
-        // Fallback A: If amount is provided, check recent event (last 4 hours) matching amount
-        if (expectedAmount && expectedAmount > 0) {
-          const now = Date.now();
-          const amountMatched = allEvents.find((ev) => {
-            if (ev.status !== 'PROCESSED' && (ev.status as string) !== 'APPROVED') return false;
-            const paid = Number(ev.paid_amount) || 0;
-            // Support both direct values (R$ 79.90) and centavos (7990 or 100 for test)
-            const matchInReais = Math.abs(paid - expectedAmount) < 0.5;
-            const matchInCents = Math.abs(paid / 100 - expectedAmount) < 0.5;
-            const isTestAmount = paid === 100 || paid === 1; // R$ 1.00 test item
-
-            if (!matchInReais && !matchInCents && !isTestAmount) return false;
-
-            const eventTime = new Date(ev.receivedAt || 0).getTime();
-            return now - eventTime < 4 * 60 * 60 * 1000;
-          });
-
-          if (amountMatched) {
-            return { paid: true, event: amountMatched };
+        if (currentUser?.id) {
+          const userSubSnap = await getDocs(collection(db, 'users', currentUser.id, 'webhook_events'));
+          const userEvents = userSubSnap.docs.map((d) => d.data() as InfinitePayWebhookEvent);
+          userEvents.sort((a, b) => new Date(b.receivedAt || 0).getTime() - new Date(a.receivedAt || 0).getTime());
+          const matchedInSub = userEvents.find(isMatch);
+          if (matchedInSub) {
+            return { paid: true, event: matchedInSub };
           }
         }
 
-        // Fallback B: If query is an internal SUB- generated code and was not directly found, check the most recent webhook event in the last 2 hours
-        if (!cleanNsu || cleanNsu.startsWith('sub-') || cleanNsu === 'latest' || cleanNsu === 'recente') {
-          const now = Date.now();
-          const recentEvent = allEvents.find((ev) => {
-            if (ev.status !== 'PROCESSED' && (ev.status as string) !== 'APPROVED') return false;
-            const eventTime = new Date(ev.receivedAt || 0).getTime();
-            return now - eventTime < 2 * 60 * 60 * 1000;
-          });
-          if (recentEvent) {
-            return { paid: true, event: recentEvent };
+        // Se for admin, pode consultar o ledger central
+        if (currentUser?.role === 'ADMIN') {
+          const snap = await getDocs(collection(db, 'webhook_events'));
+          const allEvents = snap.docs.map((d) => d.data() as InfinitePayWebhookEvent);
+          allEvents.sort((a, b) => new Date(b.receivedAt || 0).getTime() - new Date(a.receivedAt || 0).getTime());
+          const matchedDoc = allEvents.find(isMatch);
+          if (matchedDoc) {
+            return { paid: true, event: matchedDoc };
           }
         }
       } catch (err) {
         console.warn('[Firebase] Consulta direta a webhook_events falhou:', err);
       }
 
-      // 3. Try checking backend server endpoint safely if reachable
+      // 3. Consulta ao endpoint local do servidor se estiver disponível
       try {
         const serverBase = infinitePayConfig.serverWebhookUrl
           ? infinitePayConfig.serverWebhookUrl.replace(/\/api\/webhooks\/infinitepay\/?$/, '')
@@ -1048,11 +1108,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         if (text.startsWith('{')) {
           const data = JSON.parse(text);
           if (data.paid && data.event) {
-            return { paid: true, event: data.event };
+            // Garante que o evento pertence ao usuário atual
+            if (!currentUser || !data.event.userId || data.event.userId === currentUser.id || currentUser.role === 'ADMIN') {
+              return { paid: true, event: data.event };
+            }
           }
         }
       } catch {
-        // Ignored, server endpoint may be offline or on static host
+        // Ignored
       }
 
       return {
@@ -1060,7 +1123,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         message: 'Nenhum pagamento confirmado foi localizado para este pedido até o momento.',
       };
     },
-    [webhookEvents, infinitePayConfig.serverWebhookUrl]
+    [webhookEvents, infinitePayConfig.serverWebhookUrl, currentUser]
   );
 
   // Booking batch creation
