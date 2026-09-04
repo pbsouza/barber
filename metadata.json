@@ -1,6 +1,6 @@
 {
-  "name": "BarberGestão - Agendamento & Barbearia",
-  "description": "Sistema completo para agendamento de horários, assinaturas, controle de caixa, métricas e painel de barbearia.",
+  "name": "Lucas Hoffmann Barber - Agendamento & Barbearia",
+  "description": "Lucas Hoffmann Barber • Sistema exclusivo de agendamento de horários, planos de assinatura e gestão da barbearia.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

@@ -35,7 +35,7 @@ export const ClientBookingFlow: React.FC = () => {
 
   // Booking state
   const [selectedServiceId, setSelectedServiceId] = useState<string>(services[0]?.id || '');
-  const [selectedBarber, setSelectedBarber] = useState<string>('Belchior Barber');
+  const [selectedBarber, setSelectedBarber] = useState<string>('Lucas Hoffmann');
   const [selectedDate, setSelectedDate] = useState<string>('2026-09-02');
   const [selectedTime, setSelectedTime] = useState<string>('');
   const [recurrence, setRecurrence] = useState<RecurrenceType>('SINGLE');
@@ -185,33 +185,32 @@ export const ClientBookingFlow: React.FC = () => {
   return (
     <div className="max-w-4xl mx-auto px-4 py-8">
       {/* Hero Banner with Subscription Highlights */}
-      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-[#1e293b] via-[#172033] to-[#0f172a] border border-amber-500/20 p-6 md:p-8 mb-8 shadow-2xl">
-        <div className="absolute -right-10 -bottom-10 w-60 h-60 bg-amber-500/10 rounded-full blur-3xl pointer-events-none" />
+      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-[#1E2429] via-[#181D21] to-[#121619] border border-[#CBA358]/30 p-6 md:p-8 mb-8 shadow-2xl shadow-black/80">
+        <div className="absolute -right-10 -bottom-10 w-72 h-72 bg-[#CBA358]/10 rounded-full blur-3xl pointer-events-none" />
         <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
           <div className="max-w-xl">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-400 text-xs font-semibold mb-3">
-              <Sparkles className="w-3.5 h-3.5" />
-              Experiência de Barbearia Premium
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#CBA358]/10 border border-[#CBA358]/30 text-[#E5C158] text-xs font-bold mb-3 tracking-wide">
+              <Sparkles className="w-3.5 h-3.5 text-[#CBA358]" />
+              Lucas Hoffmann Barber • Estética Masculina de Alto Padrão
             </div>
-            <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight font-['Cabinet_Grotesk',sans-serif]">
-              Agende seu Horário com Perfeição
+            <h1 className="text-2xl sm:text-3xl font-black text-[#F6F2EA] tracking-tight font-['Cabinet_Grotesk',sans-serif] uppercase">
+              Agende seu Horário com <span className="text-[#CBA358]">Excelência</span>
             </h1>
-            <p className="text-slate-400 text-sm mt-2 leading-relaxed">
-              Escolha seu serviço, reserve horários únicos ou recorrentes (semanais/mensais) e aproveite o melhor da
-              estética masculina.
+            <p className="text-[#A6B2BD] text-sm mt-2 leading-relaxed">
+              Cortes clássicos, navalhados de alta precisão e barboterapia relaxante com toalha quente. Escolha horários únicos ou garanta sua recorrência semanal/quinzenal.
             </p>
           </div>
 
           {/* Club Subscription Teaser */}
-          <div className="w-full md:w-auto shrink-0 bg-amber-500/10 border border-amber-500/20 rounded-2xl p-4 text-center">
-            <div className="flex items-center justify-center gap-1.5 text-amber-400 font-bold text-xs mb-1">
-              <Crown className="w-4 h-4" />
+          <div className="w-full md:w-auto shrink-0 bg-gradient-to-b from-[#252D34] to-[#161B1E] border border-[#CBA358]/30 rounded-2xl p-5 text-center shadow-lg shadow-black/40">
+            <div className="flex items-center justify-center gap-1.5 text-[#E5C158] font-bold text-xs mb-1">
+              <Crown className="w-4 h-4 text-[#CBA358]" />
               Clube de Assinatura
             </div>
-            <p className="text-xs text-slate-300 font-medium">Cortes & Barbas Ilimitadas</p>
+            <p className="text-xs text-[#D0D7DE] font-medium">Cortes & Barbas Ilimitadas</p>
             <button
               onClick={openSubscriptionModal}
-              className="mt-3 w-full py-2 px-4 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs transition shadow-md shadow-amber-500/20"
+              className="mt-3 w-full py-2.5 px-5 rounded-xl bg-gradient-to-r from-[#CBA358] to-[#B88C3E] hover:from-[#DFB86C] hover:to-[#CBA358] text-[#14181B] font-black text-xs uppercase tracking-wider transition shadow-md shadow-[#CBA358]/20"
             >
               Conhecer Planos
             </button>
@@ -314,9 +313,9 @@ export const ClientBookingFlow: React.FC = () => {
                       </div>
                     </div>
 
-                    <div className="mt-4 pt-3 border-t border-slate-800/80 flex items-center justify-between text-xs">
-                      <span className="text-slate-400">Profissional: Belchior Master</span>
-                      <span className={`font-semibold ${isSelected ? 'text-amber-400' : 'text-slate-500'}`}>
+                    <div className="mt-4 pt-3 border-t border-[#2A333C] flex items-center justify-between text-xs">
+                      <span className="text-[#A6B2BD]">Profissional: Lucas Hoffmann</span>
+                      <span className={`font-semibold ${isSelected ? 'text-[#CBA358]' : 'text-[#798593]'}`}>
                         {isSelected ? '✓ Selecionado' : 'Clique para escolher'}
                       </span>
                     </div>
@@ -427,8 +426,8 @@ export const ClientBookingFlow: React.FC = () => {
                 onChange={(e) => setSelectedBarber(e.target.value)}
                 className="w-full bg-slate-900 border border-slate-800 rounded-xl p-3 text-white text-sm focus:outline-none focus:border-amber-500 transition"
               >
-                <option value="Belchior Barber">Belchior Master (Barbeiro Titular)</option>
-                <option value="Equipe Belchior">Qualquer Barbeiro Disponível</option>
+                <option value="Lucas Hoffmann">Lucas Hoffmann (Barbeiro Master)</option>
+                <option value="Equipe Lucas Hoffmann">Qualquer Barbeiro da Equipe</option>
               </select>
               <p className="text-[10px] text-slate-400 mt-2">
                 Atendimento pontual com toalha aromatizada e bebida de cortesia.
@@ -701,7 +700,7 @@ export const ClientBookingFlow: React.FC = () => {
             <button
               onClick={() => {
                 const cleanPhone = (currentUser?.phone || '5511999999999').replace(/\D/g, '');
-                const msg = `💈 Olá! Confirmei meu agendamento na Barbearia Belchior para ${selectedService.name} no dia ${computedDatesAndTimes[0]?.date.split('-').reverse().join('/')} às ${computedDatesAndTimes[0]?.time}.`;
+                const msg = `💈 Olá! Confirmei meu agendamento na Lucas Hoffmann Barber para ${selectedService.name} no dia ${computedDatesAndTimes[0]?.date.split('-').reverse().join('/')} às ${computedDatesAndTimes[0]?.time}.`;
                 window.open(`https://api.whatsapp.com/send?phone=${cleanPhone}&text=${encodeURIComponent(msg)}`, '_blank');
               }}
               className="flex-1 py-3 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs transition flex items-center justify-center gap-2 shadow-lg shadow-emerald-600/20"

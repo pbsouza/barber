@@ -76,7 +76,7 @@ export const AdminBookingsView: React.FC = () => {
   // Copy pre-formatted message
   const handleCopyMessage = (b: Booking) => {
     const formattedDate = b.date.split('-').reverse().join('/');
-    const text = `💈 *Lembrete Barbearia Belchior Master*\n\nOlá, *${b.clientName}*! Seu horário para *${b.serviceName}* com *${b.barberName}* está agendado para:\n\n📅 Data: *${formattedDate}*\n⏰ Horário: *${b.time}*\n📍 Endereço: *Rua das Palmeiras, 450 - Centro*\n\nPor favor, chegue com 5 minutos de antecedência. Caso precise reagendar, nos avise aqui pelo WhatsApp!\n\n_Aguardamos você!_`;
+    const text = `💈 *Lembrete Lucas Hoffmann Barber*\n\nOlá, *${b.clientName}*! Seu horário para *${b.serviceName}* com *${b.barberName}* está agendado para:\n\n📅 Data: *${formattedDate}*\n⏰ Horário: *${b.time}*\n📍 Endereço: *Rua das Palmeiras, 450 - Centro*\n\nPor favor, chegue com 5 minutos de antecedência. Caso precise reagendar, nos avise aqui pelo WhatsApp!\n\n_Aguardamos você!_`;
 
     navigator.clipboard.writeText(text);
     setCopiedId(b.id);

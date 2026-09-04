@@ -589,7 +589,7 @@ export const SubscriptionPlansModal: React.FC = () => {
                   {/* Secondary option: WhatsApp direct confirmation */}
                   <a
                     href={`https://wa.me/5511987654321?text=${encodeURIComponent(
-                      `Olá Belchior! Gostaria de ativar meu plano *${selectedPlanForCheckout.name}* (Identificador: ${orderNsu}). Já efetuei o pagamento, segue o comprovante para liberação.`
+                      `Olá Lucas Hoffmann! Gostaria de ativar meu plano *${selectedPlanForCheckout.name}* (Identificador: ${orderNsu}). Já efetuei o pagamento, segue o comprovante para liberação.`
                     )}`}
                     target="_blank"
                     rel="noopener noreferrer"
@@ -612,7 +612,7 @@ export const SubscriptionPlansModal: React.FC = () => {
             <div className="text-center max-w-xl mx-auto mb-8">
               <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-400 text-xs font-bold mb-2">
                 <Crown className="w-3.5 h-3.5" />
-                Clube de Assinatura Belchior
+                Clube de Assinatura Lucas Hoffmann
               </div>
               <h2 className="text-2xl sm:text-3xl font-extrabold text-white font-['Cabinet_Grotesk',sans-serif]">
                 Visual Impecável O Ano Todo

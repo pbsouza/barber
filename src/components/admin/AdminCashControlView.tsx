@@ -76,7 +76,7 @@ export const AdminCashControlView: React.FC = () => {
       amount: Number(transAmount),
       paymentMethod: transMethod,
       category: transCategory,
-      createdByName: 'Belchior Barber',
+      createdByName: 'Lucas Hoffmann Barber',
     });
 
     setTransDesc('');

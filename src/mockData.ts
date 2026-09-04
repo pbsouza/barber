@@ -1,8 +1,8 @@
 import { BarberService, SubscriptionPlan, User, Booking, AbsenceDay, CashTransaction, BarberAvailabilityConfig, InfinitePayConfig } from './types';
 
 export const INITIAL_INFINITEPAY_CONFIG: InfinitePayConfig = {
-  merchantName: 'Barbearia Belchior',
-  defaultUrl: 'https://pay.infinitepay.io/barbearia-belchior',
+  merchantName: 'Lucas Hoffmann Barber',
+  defaultUrl: 'https://pay.infinitepay.io/lucashoffmannbarber',
   enabled: true,
   notes: 'Pagamento via Cartão de Crédito ou Débito com a segurança e aprovação imediata da InfinitePay.',
   serverWebhookUrl: 'https://ais-pre-pov473yuxfbnsvikwv5lt2-381752577235.us-east5.run.app/api/webhooks/infinitepay',
@@ -74,7 +74,7 @@ export const INITIAL_SUBSCRIPTION_PLANS: SubscriptionPlan[] = [
     includedServicesDescription: '2 Cortes de Cabelo por mês + 10% de desconto em outros serviços',
     maxBookingsPerMonth: 2,
     discountPercentageOnOthers: 10,
-    infinitePayUrl: 'https://pay.infinitepay.io/barbearia-belchior/clube-essencial',
+    infinitePayUrl: 'https://pay.infinitepay.io/lucashoffmannbarber/clube-essencial',
     isActive: true,
   },
   {
@@ -86,7 +86,7 @@ export const INITIAL_SUBSCRIPTION_PLANS: SubscriptionPlan[] = [
     maxBookingsPerMonth: -1, // Unlimited
     discountPercentageOnOthers: 20,
     popular: true,
-    infinitePayUrl: 'https://pay.infinitepay.io/barbearia-belchior/clube-vip',
+    infinitePayUrl: 'https://pay.infinitepay.io/lucashoffmannbarber/clube-vip',
     isActive: true,
   },
   {
@@ -97,7 +97,7 @@ export const INITIAL_SUBSCRIPTION_PLANS: SubscriptionPlan[] = [
     includedServicesDescription: '4 Barboterapias completas com toalha quente no mês + 15% off em pomadas/óleos',
     maxBookingsPerMonth: 4,
     discountPercentageOnOthers: 15,
-    infinitePayUrl: 'https://pay.infinitepay.io/barbearia-belchior/clube-barba',
+    infinitePayUrl: 'https://pay.infinitepay.io/lucashoffmannbarber/clube-barba',
     isActive: true,
   },
 ];
@@ -105,8 +105,8 @@ export const INITIAL_SUBSCRIPTION_PLANS: SubscriptionPlan[] = [
 export const INITIAL_USERS: User[] = [
   {
     id: 'user-admin',
-    name: 'Belchior (Administrador)',
-    email: 'belchior87@gmail.com',
+    name: 'Lucas Hoffmann (Administrador)',
+    email: 'lucashoffmann@gmail.com',
     phone: '(11) 98765-4321',
     role: 'ADMIN',
     avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',

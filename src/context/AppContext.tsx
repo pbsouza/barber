@@ -583,7 +583,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (!matchedUser) {
         const newUser: User = {
           id: `user-${Date.now()}`,
-          name: name || (isAdminEmail ? 'Belchior (Administrador)' : 'Novo Cliente'),
+          name: name || (isAdminEmail ? 'Lucas Hoffmann (Administrador)' : 'Novo Cliente'),
           email: normalizedEmail,
           phone: phone || '(11) 99999-9999',
           role: isAdminEmail ? 'ADMIN' : 'CLIENT',
@@ -1211,7 +1211,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               paymentMethod: paymentMethod,
               category: 'SERVICO',
               date: new Date().toISOString(),
-              createdByName: 'Belchior Barber',
+              createdByName: 'Lucas Hoffmann Barber',
             };
             transactionToSave = trans;
             setTransactions((t) => [trans, ...t]);
@@ -1249,7 +1249,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     (booking: Booking) => {
       const cleanPhone = booking.clientPhone.replace(/\D/g, '');
       const formattedDate = booking.date.split('-').reverse().join('/');
-      const text = `💈 *Lembrete Barbearia Belchior Master*\n\nOlá, *${booking.clientName}*! Seu horário para *${booking.serviceName}* com *${booking.barberName}* está agendado para:\n\n📅 Data: *${formattedDate}*\n⏰ Horário: *${booking.time}*\n📍 Endereço: *Rua das Palmeiras, 450 - Centro*\n\nPor favor, chegue com 5 minutos de antecedência. Caso precise reagendar, nos avise aqui pelo WhatsApp!\n\n_Aguardamos você!_`;
+      const text = `💈 *Lembrete Lucas Hoffmann Barber*\n\nOlá, *${booking.clientName}*! Seu horário para *${booking.serviceName}* com *${booking.barberName}* está agendado para:\n\n📅 Data: *${formattedDate}*\n⏰ Horário: *${booking.time}*\n📍 Endereço: *Rua das Palmeiras, 450 - Centro*\n\nPor favor, chegue com 5 minutos de antecedência. Caso precise reagendar, nos avise aqui pelo WhatsApp!\n\n_Aguardamos você!_`;
 
       markReminderSent(booking.id);
       dismissAdminReminder();
@@ -1317,7 +1317,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const cleanUsers = [
       {
         id: 'user-admin',
-        name: 'Belchior (Administrador)',
+        name: 'Lucas Hoffmann (Administrador)',
         email: 'belchior87@gmail.com',
         phone: '(11) 98765-4321',
         role: 'ADMIN' as const,

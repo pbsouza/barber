@@ -51,39 +51,39 @@ export const AuthModal: React.FC = () => {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 overflow-y-auto animate-in fade-in">
-      <div className="bg-[#1e293b] border border-slate-800 rounded-2xl max-w-md w-full p-6 shadow-2xl relative text-slate-100">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-4 overflow-y-auto animate-in fade-in">
+      <div className="bg-[#181D21] border border-[#2E3740] rounded-3xl max-w-md w-full p-6 sm:p-8 shadow-2xl relative text-[#F6F2EA]">
         <button
           onClick={closeAuthModal}
-          className="absolute top-4 right-4 p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition"
+          className="absolute top-4 right-4 p-2 rounded-xl text-[#A6B2BD] hover:text-white hover:bg-[#262E35] transition"
         >
           <X className="w-5 h-5" />
         </button>
 
         {/* Modal Header */}
         <div className="text-center mb-6">
-          <div className="w-12 h-12 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-amber-400 flex items-center justify-center mx-auto mb-3 shadow-inner">
-            <Lock className="w-6 h-6" />
+          <div className="w-14 h-14 rounded-2xl bg-gradient-to-b from-[#2A333C] to-[#161B1F] border border-[#CBA358]/40 p-1 flex items-center justify-center mx-auto mb-3 shadow-lg shadow-black/60">
+            <img src="/favicon.png" alt="Lucas Hoffmann" className="w-full h-full object-cover rounded-xl" />
           </div>
-          <h2 className="text-xl font-bold text-white font-['Cabinet_Grotesk',sans-serif]">
-            {mode === 'LOGIN' ? 'Acesse sua Conta' : 'Criar Cadastro Rápido'}
+          <h2 className="text-2xl font-black text-[#F6F2EA] font-['Cabinet_Grotesk',sans-serif] uppercase tracking-wide">
+            {mode === 'LOGIN' ? 'Acessar Conta' : 'Criar Cadastro'}
           </h2>
-          <p className="text-xs text-slate-400 mt-1">
+          <p className="text-xs text-[#A6B2BD] mt-1">
             {pendingBooking
-              ? 'Faça login ou cadastre-se para confirmar seu agendamento na barbearia'
-              : 'Gerencie seus horários, clube de assinatura e histórico'}
+              ? 'Faça login ou cadastre-se para confirmar seu agendamento na Lucas Hoffmann Barber'
+              : 'Gerencie seus horários, assinaturas e histórico exclusivo'}
           </p>
         </div>
 
         {/* Pending Booking Notice */}
         {pendingBooking && (
-          <div className="mb-5 p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-amber-500/20 text-amber-400 font-bold text-xs">
+          <div className="mb-5 p-3 rounded-2xl bg-[#CBA358]/10 border border-[#CBA358]/30 flex items-center gap-3">
+            <div className="p-2 rounded-xl bg-[#CBA358]/20 text-[#CBA358] font-bold text-xs">
               {pendingBooking.datesAndTimes.length}x
             </div>
             <div className="text-xs">
-              <span className="font-semibold text-amber-300">Reserva em andamento!</span>
-              <p className="text-slate-400">
+              <span className="font-bold text-[#E5C158]">Reserva em andamento!</span>
+              <p className="text-[#A6B2BD]">
                 Horário reservado: {pendingBooking.datesAndTimes[0]?.time} em{' '}
                 {pendingBooking.datesAndTimes[0]?.date.split('-').reverse().join('/')}
               </p>
@@ -92,12 +92,14 @@ export const AuthModal: React.FC = () => {
         )}
 
         {/* Mode Switcher */}
-        <div className="flex rounded-xl bg-slate-900 p-1 border border-slate-800 mb-5">
+        <div className="flex rounded-2xl bg-[#13171A] p-1 border border-[#2C343D] mb-5">
           <button
             type="button"
             onClick={() => setMode('LOGIN')}
-            className={`flex-1 py-2 text-xs font-semibold rounded-lg transition ${
-              mode === 'LOGIN' ? 'bg-amber-500 text-slate-950 font-bold shadow' : 'text-slate-400 hover:text-white'
+            className={`flex-1 py-2 text-xs font-bold rounded-xl transition ${
+              mode === 'LOGIN'
+                ? 'bg-gradient-to-r from-[#CBA358] to-[#B88C3E] text-[#14181B] shadow-md shadow-[#CBA358]/20'
+                : 'text-[#A6B2BD] hover:text-[#F6F2EA]'
             }`}
           >
             Entrar
@@ -105,8 +107,10 @@ export const AuthModal: React.FC = () => {
           <button
             type="button"
             onClick={() => setMode('REGISTER')}
-            className={`flex-1 py-2 text-xs font-semibold rounded-lg transition ${
-              mode === 'REGISTER' ? 'bg-amber-500 text-slate-950 font-bold shadow' : 'text-slate-400 hover:text-white'
+            className={`flex-1 py-2 text-xs font-bold rounded-xl transition ${
+              mode === 'REGISTER'
+                ? 'bg-gradient-to-r from-[#CBA358] to-[#B88C3E] text-[#14181B] shadow-md shadow-[#CBA358]/20'
+                : 'text-[#A6B2BD] hover:text-[#F6F2EA]'
             }`}
           >
             Novo Cadastro
@@ -114,7 +118,7 @@ export const AuthModal: React.FC = () => {
         </div>
 
         {errorMsg && (
-          <div className="mb-4 p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-xs">
+          <div className="mb-4 p-3 rounded-2xl bg-red-500/10 border border-red-500/30 text-red-400 text-xs font-medium">
             {errorMsg}
           </div>
         )}
@@ -123,50 +127,50 @@ export const AuthModal: React.FC = () => {
         <form onSubmit={handleSubmit} className="space-y-4">
           {mode === 'REGISTER' && (
             <div>
-              <label className="block text-xs font-medium text-slate-300 mb-1.5">Nome Completo</label>
+              <label className="block text-xs font-medium text-[#C5CCD3] mb-1.5">Nome Completo</label>
               <div className="relative">
-                <User className="w-4 h-4 text-slate-500 absolute left-3 top-3" />
+                <User className="w-4 h-4 text-[#8895A3] absolute left-3.5 top-3.5" />
                 <input
                   type="text"
                   required
-                  placeholder="Ex: João Silva"
+                  placeholder="Ex: Carlos Eduardo"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  className="w-full bg-slate-900 border border-slate-800 rounded-xl py-2.5 pl-9 pr-3 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-amber-500 transition"
+                  className="w-full bg-[#13171A] border border-[#2C343D] rounded-2xl py-3 pl-10 pr-3 text-sm text-[#F6F2EA] placeholder-[#6E7B8B] focus:outline-none focus:border-[#CBA358] transition"
                 />
               </div>
             </div>
           )}
 
           <div>
-            <label className="block text-xs font-medium text-slate-300 mb-1.5">E-mail</label>
+            <label className="block text-xs font-medium text-[#C5CCD3] mb-1.5">E-mail</label>
             <div className="relative">
-              <Mail className="w-4 h-4 text-slate-500 absolute left-3 top-3" />
+              <Mail className="w-4 h-4 text-[#8895A3] absolute left-3.5 top-3.5" />
               <input
                 type="email"
                 required
                 placeholder="seu@email.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="w-full bg-slate-900 border border-slate-800 rounded-xl py-2.5 pl-9 pr-3 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-amber-500 transition"
+                className="w-full bg-[#13171A] border border-[#2C343D] rounded-2xl py-3 pl-10 pr-3 text-sm text-[#F6F2EA] placeholder-[#6E7B8B] focus:outline-none focus:border-[#CBA358] transition"
               />
             </div>
-            <p className="text-[10px] text-slate-400 mt-1">
+            <p className="text-[10px] text-[#8895A3] mt-1">
               O sistema detecta automaticamente se sua conta é de Administrador ou Cliente.
             </p>
           </div>
 
           {mode === 'REGISTER' && (
             <div>
-              <label className="block text-xs font-medium text-slate-300 mb-1.5">WhatsApp / Celular</label>
+              <label className="block text-xs font-medium text-[#C5CCD3] mb-1.5">WhatsApp / Celular</label>
               <div className="relative">
-                <Phone className="w-4 h-4 text-slate-500 absolute left-3 top-3" />
+                <Phone className="w-4 h-4 text-[#8895A3] absolute left-3.5 top-3.5" />
                 <input
                   type="tel"
                   placeholder="(11) 99999-9999"
                   value={phone}
                   onChange={(e) => setPhone(e.target.value)}
-                  className="w-full bg-slate-900 border border-slate-800 rounded-xl py-2.5 pl-9 pr-3 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-amber-500 transition"
+                  className="w-full bg-[#13171A] border border-[#2C343D] rounded-2xl py-3 pl-10 pr-3 text-sm text-[#F6F2EA] placeholder-[#6E7B8B] focus:outline-none focus:border-[#CBA358] transition"
                 />
               </div>
             </div>
@@ -174,26 +178,26 @@ export const AuthModal: React.FC = () => {
 
           <div>
             <div className="flex justify-between items-center mb-1.5">
-              <label className="block text-xs font-medium text-slate-300">Senha</label>
+              <label className="block text-xs font-medium text-[#C5CCD3]">Senha</label>
               {mode === 'LOGIN' && (
-                <span className="text-[11px] text-amber-400 hover:underline cursor-pointer">Esqueceu?</span>
+                <span className="text-[11px] text-[#CBA358] hover:underline cursor-pointer font-semibold">Esqueceu?</span>
               )}
             </div>
             <div className="relative">
-              <Lock className="w-4 h-4 text-slate-500 absolute left-3 top-3" />
+              <Lock className="w-4 h-4 text-[#8895A3] absolute left-3.5 top-3.5" />
               <input
                 type="password"
                 placeholder="••••••••"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full bg-slate-900 border border-slate-800 rounded-xl py-2.5 pl-9 pr-3 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-amber-500 transition"
+                className="w-full bg-[#13171A] border border-[#2C343D] rounded-2xl py-3 pl-10 pr-3 text-sm text-[#F6F2EA] placeholder-[#6E7B8B] focus:outline-none focus:border-[#CBA358] transition"
               />
             </div>
           </div>
 
           <button
             type="submit"
-            className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-bold text-sm transition shadow-lg shadow-amber-500/20 flex items-center justify-center gap-2 mt-2"
+            className="w-full py-3.5 px-4 rounded-2xl bg-gradient-to-r from-[#CBA358] to-[#B88C3E] hover:from-[#DFB86C] hover:to-[#CBA358] text-[#14181B] font-black text-sm uppercase tracking-wider transition shadow-lg shadow-[#CBA358]/25 flex items-center justify-center gap-2 mt-3"
           >
             <span>{mode === 'LOGIN' ? 'Entrar no Sistema' : 'Concluir Cadastro'}</span>
             <ArrowRight className="w-4 h-4" />
@@ -201,35 +205,35 @@ export const AuthModal: React.FC = () => {
         </form>
 
         {/* Quick Demo Access Bar */}
-        <div className="mt-6 pt-5 border-t border-slate-800">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-[11px] font-semibold text-slate-400 flex items-center gap-1">
-              <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-              Acesso Demo Imediato (1 Clique)
+        <div className="mt-6 pt-5 border-t border-[#262E35]">
+          <div className="flex items-center justify-between mb-2.5">
+            <span className="text-[11px] font-bold text-[#A6B2BD] flex items-center gap-1.5">
+              <Sparkles className="w-3.5 h-3.5 text-[#CBA358]" />
+              Acesso Rápido de Demonstração
             </span>
           </div>
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-2 gap-2.5">
             <button
               type="button"
               onClick={() => handleQuickLogin('belchior87@gmail.com', 'ADMIN')}
-              className="flex items-center gap-2 p-2.5 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 text-left transition group"
+              className="flex items-center gap-2.5 p-3 rounded-2xl bg-[#CBA358]/10 hover:bg-[#CBA358]/20 border border-[#CBA358]/30 text-left transition group"
             >
-              <ShieldCheck className="w-4 h-4 text-amber-400 shrink-0" />
+              <ShieldCheck className="w-4 h-4 text-[#CBA358] shrink-0" />
               <div className="min-w-0">
-                <p className="text-xs font-bold text-amber-300 truncate">ADM Barbearia</p>
-                <p className="text-[10px] text-slate-400 truncate">Detecta Admin</p>
+                <p className="text-xs font-bold text-[#F6F2EA] group-hover:text-[#CBA358] truncate">Lucas Hoffmann</p>
+                <p className="text-[10px] text-[#A6B2BD] truncate">Administrador</p>
               </div>
             </button>
 
             <button
               type="button"
               onClick={() => handleQuickLogin('lucas.silveira@email.com', 'CLIENT')}
-              className="flex items-center gap-2 p-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-left transition group"
+              className="flex items-center gap-2.5 p-3 rounded-2xl bg-[#13171A] hover:bg-[#20272D] border border-[#2C343D] text-left transition group"
             >
               <User className="w-4 h-4 text-emerald-400 shrink-0" />
               <div className="min-w-0">
-                <p className="text-xs font-bold text-slate-200 truncate">Cliente VIP</p>
-                <p className="text-[10px] text-slate-400 truncate">Com Assinatura</p>
+                <p className="text-xs font-bold text-[#F6F2EA] truncate">Cliente VIP</p>
+                <p className="text-[10px] text-[#A6B2BD] truncate">Com Assinatura</p>
               </div>
             </button>
           </div>

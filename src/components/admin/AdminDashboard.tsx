@@ -64,7 +64,7 @@ export const AdminDashboard: React.FC = () => {
                 </span>
               </div>
               <h1 className="text-2xl sm:text-3xl font-extrabold text-white mt-1 tracking-tight font-['Cabinet_Grotesk',sans-serif]">
-                Gestão da Barbearia Belchior
+                Lucas Hoffmann Barber • Gestão Executiva
               </h1>
               <p className="text-xs text-slate-400 mt-0.5">
                 Olá, {currentUser?.name}! Gerencie agendamentos, caixa, métricas e previsões com facilidade.

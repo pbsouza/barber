@@ -87,8 +87,8 @@ export const AdminSubscriptionsView: React.FC = () => {
   } = useApp();
 
   // InfinitePay form state
-  const [merchantName, setMerchantName] = useState(infinitePayConfig.merchantName || 'Barbearia Belchior');
-  const [defaultUrl, setDefaultUrl] = useState(infinitePayConfig.defaultUrl || 'https://pay.infinitepay.io/barbearia-belchior');
+  const [merchantName, setMerchantName] = useState(infinitePayConfig.merchantName || 'Lucas Hoffmann Barber');
+  const [defaultUrl, setDefaultUrl] = useState(infinitePayConfig.defaultUrl || 'https://pay.infinitepay.io/lucashoffmannbarber');
   const [enabled, setEnabled] = useState(infinitePayConfig.enabled ?? true);
   const [notes, setNotes] = useState(infinitePayConfig.notes || '');
   const [saveSuccessMsg, setSaveSuccessMsg] = useState('');
@@ -524,7 +524,7 @@ export const AdminSubscriptionsView: React.FC = () => {
                 type="text"
                 value={merchantName}
                 onChange={(e) => setMerchantName(e.target.value)}
-                placeholder="Ex: Barbearia Belchior"
+                placeholder="Ex: Lucas Hoffmann Barber"
                 className="w-full bg-slate-900 border border-slate-800 rounded-xl px-4 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-500"
                 required
               />
@@ -1360,7 +1360,7 @@ export const AdminSubscriptionsView: React.FC = () => {
                   type="text"
                   value={planName}
                   onChange={(e) => setPlanName(e.target.value)}
-                  placeholder="Ex: Clube VIP Belchior, Clube Essencial, Clube Barba"
+                  placeholder="Ex: Clube VIP Lucas Hoffmann, Clube Essencial, Clube Barba"
                   className="w-full bg-slate-900 border border-slate-800 rounded-xl px-4 py-2.5 text-white placeholder-slate-500 focus:outline-none focus:border-amber-500"
                   required
                 />

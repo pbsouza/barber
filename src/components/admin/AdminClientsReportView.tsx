@@ -30,7 +30,7 @@ export const AdminClientsReportView: React.FC = () => {
 
   const handleWhatsAppReactivate = (client: ClientReportItem) => {
     const cleanPhone = client.phone.replace(/\D/g, '');
-    const text = `💈 *Olá, ${client.name}! Tudo bem?*\n\nSentimos sua falta aqui na *Barbearia Belchior Master*!\nQue tal renovar o visual e alinhar a barba essa semana?\n\nPreparamos uma cortesia especial: no seu próximo agendamento você ganha uma cerveja gelada ou café especial!\n\n📅 Agende seu horário pelo nosso app ou responda aqui para escolhermos o melhor horário para você!\n\n_Te esperamos!_`;
+    const text = `💈 *Olá, ${client.name}! Tudo bem?*\n\nSentimos sua falta aqui na *Lucas Hoffmann Barber*!\nQue tal renovar o visual e alinhar a barba essa semana?\n\nPreparamos uma cortesia especial: no seu próximo agendamento você ganha uma bebida especial ou café gourmet de cortesia!\n\n📅 Agende seu horário pelo nosso app ou responda aqui para escolhermos o melhor horário para você!\n\n_Te esperamos!_`;
     window.open(`https://api.whatsapp.com/send?phone=${cleanPhone}&text=${encodeURIComponent(text)}`, '_blank');
   };
 
