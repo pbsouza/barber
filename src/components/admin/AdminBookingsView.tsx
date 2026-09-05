@@ -18,7 +18,7 @@ import {
 } from 'lucide-react';
 
 export const AdminBookingsView: React.FC = () => {
-  const { bookings, updateBookingStatus, sendWhatsAppReminder } = useApp();
+  const { bookings, updateBookingStatus, sendWhatsAppReminder, establishmentInfo } = useApp();
 
   const [filterDate, setFilterDate] = useState<'HOJE' | 'AMANHA' | 'SEMANA' | 'TODOS'>('TODOS');
   const [filterStatus, setFilterStatus] = useState<string>('TODOS');
@@ -76,7 +76,9 @@ export const AdminBookingsView: React.FC = () => {
   // Copy pre-formatted message
   const handleCopyMessage = (b: Booking) => {
     const formattedDate = b.date.split('-').reverse().join('/');
-    const text = `💈 *Lembrete Lucas Hoffmann Barber*\n\nOlá, *${b.clientName}*! Seu horário para *${b.serviceName}* com *${b.barberName}* está agendado para:\n\n📅 Data: *${formattedDate}*\n⏰ Horário: *${b.time}*\n📍 Endereço: *Rua das Palmeiras, 450 - Centro*\n\nPor favor, chegue com 5 minutos de antecedência. Caso precise reagendar, nos avise aqui pelo WhatsApp!\n\n_Aguardamos você!_`;
+    const shopName = establishmentInfo.name || 'Lucas Hoffmann Barber';
+    const shopAddress = `${establishmentInfo.address}, ${establishmentInfo.neighborhood} - ${establishmentInfo.city}`;
+    const text = `💈 *Lembrete ${shopName}*\n\nOlá, *${b.clientName}*! Seu horário para *${b.serviceName}* com *${b.barberName}* está agendado para:\n\n📅 Data: *${formattedDate}*\n⏰ Horário: *${b.time}*\n📍 Endereço: *${shopAddress}*\n\nPor favor, chegue com 5 minutos de antecedência. Caso precise reagendar, nos avise aqui pelo WhatsApp!\n\n_Aguardamos você!_`;
 
     navigator.clipboard.writeText(text);
     setCopiedId(b.id);

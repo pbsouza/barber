@@ -14,6 +14,7 @@ import {
   RevenueForecast,
   InfinitePayConfig,
   InfinitePayWebhookEvent,
+  EstablishmentInfo,
 } from '../types';
 import {
   INITIAL_SERVICES,
@@ -24,6 +25,7 @@ import {
   INITIAL_ABSENCE_DAYS,
   INITIAL_TRANSACTIONS,
   INITIAL_AVAILABILITY_CONFIG,
+  INITIAL_ESTABLISHMENT_INFO,
 } from '../mockData';
 import {
   collection,
@@ -129,6 +131,10 @@ interface AppContextType {
   activeAdminReminderBooking: Booking | null;
   dismissAdminReminder: () => void;
   sendWhatsAppReminder: (booking: Booking) => void;
+
+  // Establishment & Contact Details
+  establishmentInfo: EstablishmentInfo;
+  updateEstablishmentInfo: (info: Partial<EstablishmentInfo>) => Promise<void>;
 
   // Navigation / View State
   activeView: 'BOOKING' | 'MY_BOOKINGS' | 'ADMIN_PANEL';
@@ -245,6 +251,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   });
 
+  const [establishmentInfo, setEstablishmentInfo] = useState<EstablishmentInfo>(() => {
+    try {
+      const saved = localStorage.getItem('barber_establishment');
+      if (!saved) return INITIAL_ESTABLISHMENT_INFO;
+      const parsed = JSON.parse(saved);
+      return parsed && typeof parsed === 'object' ? parsed : INITIAL_ESTABLISHMENT_INFO;
+    } catch {
+      return INITIAL_ESTABLISHMENT_INFO;
+    }
+  });
+
   const [transactions, setTransactions] = useState<CashTransaction[]>(() => {
     try {
       const saved = localStorage.getItem('barber_transactions');
@@ -337,6 +354,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setInfinitePayConfig(snap.data() as InfinitePayConfig);
       } else {
         setDoc(doc(db, 'settings', 'infinitepay'), INITIAL_INFINITEPAY_CONFIG).catch(console.error);
+      }
+    });
+
+    const unsubEstablishment = onSnapshot(doc(db, 'settings', 'establishment'), (snap) => {
+      if (snap.exists()) {
+        setEstablishmentInfo(snap.data() as EstablishmentInfo);
+      } else {
+        setDoc(doc(db, 'settings', 'establishment'), INITIAL_ESTABLISHMENT_INFO).catch(console.error);
       }
     });
 
@@ -482,6 +507,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, [availabilityConfig]);
 
   useEffect(() => {
+    localStorage.setItem('barber_establishment', JSON.stringify(establishmentInfo));
+  }, [establishmentInfo]);
+
+  useEffect(() => {
     localStorage.setItem('barber_transactions', JSON.stringify(transactions));
   }, [transactions]);
 
@@ -493,9 +522,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   }, [pendingBooking]);
 
-  // Session timer logic: 5 minutes automatic logout
+  // Session timer logic: 5 minutes automatic logout without renewal possibility
   const renewSession = useCallback(() => {
-    setSessionRemainingSeconds(SESSION_MAX_DURATION);
+    // Session renewal is strictly prohibited by security policy (forces fresh login after 5 mins)
   }, []);
 
   const logout = useCallback(() => {
@@ -507,6 +536,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   useEffect(() => {
     if (!currentUser) return;
 
+    // Start 5-minute strict countdown upon authentication
     setSessionRemainingSeconds(SESSION_MAX_DURATION);
 
     const interval = setInterval(() => {
@@ -521,19 +551,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       });
     }, 1000);
 
-    const handleActivity = () => {
-      setSessionRemainingSeconds((prev) => (prev > 0 ? SESSION_MAX_DURATION : 0));
-    };
-
-    window.addEventListener('mousemove', handleActivity);
-    window.addEventListener('keydown', handleActivity);
-    window.addEventListener('touchstart', handleActivity);
-
+    // No activity listeners: the 5-minute session is non-renewable
     return () => {
       clearInterval(interval);
-      window.removeEventListener('mousemove', handleActivity);
-      window.removeEventListener('keydown', handleActivity);
-      window.removeEventListener('touchstart', handleActivity);
     };
   }, [currentUser, logout]);
 
@@ -575,10 +595,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const normalizedEmail = email.trim().toLowerCase();
       let matchedUser = users.find((u) => u.email.toLowerCase() === normalizedEmail);
 
+      const configuredAdminEmail = (establishmentInfo?.adminEmail || 'belchior87@gmail.com').trim().toLowerCase();
+
       const isAdminEmail =
-        normalizedEmail.includes('admin') ||
+        normalizedEmail === configuredAdminEmail ||
         normalizedEmail === 'belchior87@gmail.com' ||
-        role === 'ADMIN';
+        normalizedEmail.includes('admin') ||
+        role === 'ADMIN' ||
+        matchedUser?.role === 'ADMIN';
 
       if (!matchedUser) {
         const newUser: User = {
@@ -599,21 +623,34 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
 
       setCurrentUser(matchedUser);
-      renewSession();
+      setSessionRemainingSeconds(SESSION_MAX_DURATION);
       setIsAuthModalOpen(false);
 
       if (matchedUser.role === 'ADMIN') {
         setActiveView('ADMIN_PANEL');
       } else {
         if (!pendingBooking) {
-          setActiveView('MY_BOOKINGS');
+          setActiveView('BOOKING');
         }
       }
 
       return true;
     },
-    [users, pendingBooking, renewSession]
+    [users, pendingBooking, establishmentInfo?.adminEmail]
   );
+
+  const updateEstablishmentInfo = useCallback(async (info: Partial<EstablishmentInfo>) => {
+    setEstablishmentInfo((prev) => {
+      const updated = { ...prev, ...info };
+      localStorage.setItem('barber_establishment', JSON.stringify(updated));
+      return updated;
+    });
+    try {
+      await setDoc(doc(db, 'settings', 'establishment'), info, { merge: true });
+    } catch (err) {
+      console.error('[Firebase] Erro ao salvar dados do estabelecimento:', err);
+    }
+  }, []);
 
   const openAuthModal = useCallback((mode: 'LOGIN' | 'REGISTER' = 'LOGIN') => {
     setAuthModalMode(mode);
@@ -1249,7 +1286,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     (booking: Booking) => {
       const cleanPhone = booking.clientPhone.replace(/\D/g, '');
       const formattedDate = booking.date.split('-').reverse().join('/');
-      const text = `💈 *Lembrete Lucas Hoffmann Barber*\n\nOlá, *${booking.clientName}*! Seu horário para *${booking.serviceName}* com *${booking.barberName}* está agendado para:\n\n📅 Data: *${formattedDate}*\n⏰ Horário: *${booking.time}*\n📍 Endereço: *Rua das Palmeiras, 450 - Centro*\n\nPor favor, chegue com 5 minutos de antecedência. Caso precise reagendar, nos avise aqui pelo WhatsApp!\n\n_Aguardamos você!_`;
+      const shopName = establishmentInfo.name || 'Lucas Hoffmann Barber';
+      const shopAddress = `${establishmentInfo.address}, ${establishmentInfo.neighborhood} - ${establishmentInfo.city}`;
+      const text = `💈 *Lembrete ${shopName}*\n\nOlá, *${booking.clientName}*! Seu horário para *${booking.serviceName}* com *${booking.barberName}* está agendado para:\n\n📅 Data: *${formattedDate}*\n⏰ Horário: *${booking.time}*\n📍 Endereço: *${shopAddress}*\n\nPor favor, chegue com 5 minutos de antecedência. Caso precise reagendar, nos avise aqui pelo WhatsApp!\n\n_Aguardamos você!_`;
 
       markReminderSent(booking.id);
       dismissAdminReminder();
@@ -1257,7 +1296,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const url = `https://api.whatsapp.com/send?phone=${cleanPhone}&text=${encodeURIComponent(text)}`;
       window.open(url, '_blank');
     },
-    [markReminderSent, dismissAdminReminder]
+    [markReminderSent, dismissAdminReminder, establishmentInfo]
   );
 
   // Availability & Absence
@@ -1509,6 +1548,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       activeAdminReminderBooking,
       dismissAdminReminder,
       sendWhatsAppReminder,
+      establishmentInfo,
+      updateEstablishmentInfo,
       activeView,
       setActiveView,
     }),
@@ -1564,6 +1605,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       activeAdminReminderBooking,
       dismissAdminReminder,
       sendWhatsAppReminder,
+      establishmentInfo,
+      updateEstablishmentInfo,
       activeView,
       setActiveView,
     ]
@@ -1578,9 +1621,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             <div className="w-14 h-14 mx-auto rounded-full bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 mb-4 text-2xl">
               ⏱️
             </div>
-            <h3 className="text-xl font-bold text-white mb-2">Sessão Expirada por Inatividade</h3>
+            <h3 className="text-xl font-bold text-white mb-2">Sessão Expirada (5 Minutos)</h3>
             <p className="text-slate-400 text-sm mb-6">
-              Para sua segurança, a sessão foi desconectada após 5 minutos sem interação.
+              Por medida de segurança, o acesso expira após 5 minutos sem possibilidade de renovação. É necessário autenticar-se novamente para continuar.
             </p>
             <button
               onClick={() => {

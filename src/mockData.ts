@@ -1,4 +1,24 @@
-import { BarberService, SubscriptionPlan, User, Booking, AbsenceDay, CashTransaction, BarberAvailabilityConfig, InfinitePayConfig } from './types';
+import { BarberService, SubscriptionPlan, User, Booking, AbsenceDay, CashTransaction, BarberAvailabilityConfig, InfinitePayConfig, EstablishmentInfo } from './types';
+
+export const INITIAL_ESTABLISHMENT_INFO: EstablishmentInfo = {
+  name: 'Lucas Hoffmann Barber',
+  tagline: 'Estética Masculina de Alto Padrão',
+  address: 'Rua das Palmeiras, 450',
+  neighborhood: 'Centro',
+  city: 'São Paulo',
+  state: 'SP',
+  postalCode: '01001-000',
+  phone: '(11) 98765-4321',
+  whatsapp: '5511987654321',
+  email: 'contato@lucashoffmannbarber.com.br',
+  adminEmail: 'belchior87@gmail.com',
+  instagram: '@lucashoffmannbarber',
+  googleMapsUrl: 'https://maps.google.com/?q=Rua+das+Palmeiras+450+Centro+Sao+Paulo',
+  weekdaysHours: 'Segunda a Sexta: 09:00 às 20:00',
+  saturdayHours: 'Sábado: 08:30 às 19:00',
+  sundayHours: 'Domingo: Fechado (Consultar feriados)',
+  notes: 'Ambiente climatizado, toalha quente, barbearia clássica e café gourmet ou chopp artesanal de cortesia.',
+};
 
 export const INITIAL_INFINITEPAY_CONFIG: InfinitePayConfig = {
   merchantName: 'Lucas Hoffmann Barber',

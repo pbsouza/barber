@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import { RecurrenceType, BarberService } from '../types';
 import {
@@ -31,6 +31,7 @@ export const ClientBookingFlow: React.FC = () => {
     setPendingBooking,
     setActiveView,
     infinitePayConfig,
+    establishmentInfo,
   } = useApp();
 
   // Booking state
@@ -42,6 +43,27 @@ export const ClientBookingFlow: React.FC = () => {
   const [notes, setNotes] = useState<string>('');
   const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
   const [confirmedBookingIds, setConfirmedBookingIds] = useState<string[]>([]);
+
+  // Internal step navigation with Browser & Android back button support
+  const goToStep = (newStep: 1 | 2 | 3 | 4, pushHistory = true) => {
+    setStep(newStep);
+    if (pushHistory) {
+      window.history.pushState({ appView: 'BOOKING', bookingStep: newStep }, '');
+    }
+  };
+
+  useEffect(() => {
+    const handlePopState = (event: PopStateEvent) => {
+      if (event.state && typeof event.state.bookingStep === 'number') {
+        setStep(event.state.bookingStep as 1 | 2 | 3 | 4);
+      } else if (event.state && event.state.appView === 'BOOKING') {
+        setStep(1);
+      }
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
 
   const safeServices = services || [];
   const safeBookings = bookings || [];
@@ -157,7 +179,7 @@ export const ClientBookingFlow: React.FC = () => {
       return;
     }
 
-    setStep(3);
+    goToStep(3);
   };
 
   // Confirm booking
@@ -179,7 +201,7 @@ export const ClientBookingFlow: React.FC = () => {
     );
 
     setConfirmedBookingIds(ids);
-    setStep(4);
+    goToStep(4);
   };
 
   return (
@@ -276,7 +298,7 @@ export const ClientBookingFlow: React.FC = () => {
             <span className="text-xs text-slate-400">{safeServices.filter((s) => s.isActive).length} opções disponíveis</span>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {safeServices
               .filter((s) => s.isActive)
               .map((service) => {
@@ -326,7 +348,7 @@ export const ClientBookingFlow: React.FC = () => {
 
           <div className="flex justify-end pt-4">
             <button
-              onClick={() => setStep(2)}
+              onClick={() => goToStep(2)}
               className="flex items-center gap-2 py-3 px-6 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-sm transition shadow-lg shadow-amber-500/20"
             >
               <span>Escolher Data e Horário</span>
@@ -341,7 +363,7 @@ export const ClientBookingFlow: React.FC = () => {
         <div className="space-y-6">
           <div className="flex items-center justify-between">
             <button
-              onClick={() => setStep(1)}
+              onClick={() => goToStep(1)}
               className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-white transition"
             >
               <ArrowLeft className="w-4 h-4" />
@@ -513,7 +535,7 @@ export const ClientBookingFlow: React.FC = () => {
 
           <div className="flex justify-between items-center pt-4">
             <button
-              onClick={() => setStep(1)}
+              onClick={() => goToStep(1)}
               className="py-3 px-5 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-semibold text-xs transition"
             >
               Voltar
@@ -540,7 +562,7 @@ export const ClientBookingFlow: React.FC = () => {
         <div className="space-y-6">
           <div className="flex items-center justify-between">
             <button
-              onClick={() => setStep(2)}
+              onClick={() => goToStep(2)}
               className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-white transition"
             >
               <ArrowLeft className="w-4 h-4" />
@@ -691,7 +713,9 @@ export const ClientBookingFlow: React.FC = () => {
             </div>
             <div className="flex justify-between">
               <span className="text-slate-400">Endereço:</span>
-              <span className="text-slate-300">Rua das Palmeiras, 450 - Centro</span>
+              <span className="text-slate-300">
+                {establishmentInfo.address}, {establishmentInfo.neighborhood} - {establishmentInfo.city}
+              </span>
             </div>
           </div>
 
@@ -699,8 +723,8 @@ export const ClientBookingFlow: React.FC = () => {
           <div className="mt-6 flex flex-col sm:flex-row gap-3">
             <button
               onClick={() => {
-                const cleanPhone = (currentUser?.phone || '5511999999999').replace(/\D/g, '');
-                const msg = `💈 Olá! Confirmei meu agendamento na Lucas Hoffmann Barber para ${selectedService.name} no dia ${computedDatesAndTimes[0]?.date.split('-').reverse().join('/')} às ${computedDatesAndTimes[0]?.time}.`;
+                const cleanPhone = (establishmentInfo.phone || currentUser?.phone || '5511987654321').replace(/\D/g, '');
+                const msg = `💈 Olá! Confirmei meu agendamento na ${establishmentInfo.name || 'Lucas Hoffmann Barber'} para ${selectedService.name} no dia ${computedDatesAndTimes[0]?.date.split('-').reverse().join('/')} às ${computedDatesAndTimes[0]?.time} no endereço: ${establishmentInfo.address}, ${establishmentInfo.neighborhood}.`;
                 window.open(`https://api.whatsapp.com/send?phone=${cleanPhone}&text=${encodeURIComponent(msg)}`, '_blank');
               }}
               className="flex-1 py-3 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs transition flex items-center justify-center gap-2 shadow-lg shadow-emerald-600/20"
@@ -719,7 +743,7 @@ export const ClientBookingFlow: React.FC = () => {
 
           <button
             onClick={() => {
-              setStep(1);
+              goToStep(1);
               setSelectedTime('');
               setRecurrence('SINGLE');
             }}

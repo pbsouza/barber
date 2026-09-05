@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { useApp } from '../context/AppContext';
 import { BrandLogo } from './BrandLogo';
 import {
@@ -7,26 +7,19 @@ import {
   ShieldCheck,
   User as UserIcon,
   LogOut,
-  Sparkles,
-  RefreshCw,
   Crown,
-  ChevronDown,
 } from 'lucide-react';
 
 export const Navbar: React.FC = () => {
   const {
     currentUser,
     sessionRemainingSeconds,
-    renewSession,
     logout,
-    login,
     openAuthModal,
     openSubscriptionModal,
     activeView,
     setActiveView,
   } = useApp();
-
-  const [showDemoMenu, setShowDemoMenu] = useState(false);
 
   // Format 5-min timer
   const minutes = Math.floor(sessionRemainingSeconds / 60);
@@ -99,92 +92,21 @@ export const Navbar: React.FC = () => {
 
           {/* Right Section: Session Countdown & User Badge */}
           <div className="flex items-center gap-3">
-            {/* 5-minute Activity Expiration Countdown Indicator */}
+            {/* 5-minute Non-renewable Session Countdown Indicator */}
             {currentUser && (
               <div
-                title="Sessão expira automaticamente em 5 minutos de inatividade"
-                className={`hidden lg:flex items-center gap-2 px-3 py-1.5 rounded-xl border text-xs font-medium transition ${
+                title="Sessão segura de 5 minutos sem renovação"
+                className={`hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-xl border text-xs font-medium transition ${
                   isUrgent
                     ? 'bg-red-500/10 border-red-500/30 text-red-400 animate-pulse'
                     : 'bg-[#181D21] border-[#2C343D] text-[#A6B2BD]'
                 }`}
               >
                 <Clock className={`w-3.5 h-3.5 ${isUrgent ? 'text-red-400' : 'text-[#CBA358]'}`} />
-                <span>Sessão:</span>
+                <span className="hidden md:inline">Sessão:</span>
                 <span className="font-mono font-bold text-[#F6F2EA]">{formattedTime}</span>
-                <button
-                  onClick={renewSession}
-                  className="p-1 hover:text-[#CBA358] transition"
-                  title="Renovar tempo de 5 minutos"
-                >
-                  <RefreshCw className="w-3 h-3 hover:rotate-180 transition duration-300" />
-                </button>
               </div>
             )}
-
-            {/* Quick Access Switcher */}
-            <div className="relative">
-              <button
-                onClick={() => setShowDemoMenu(!showDemoMenu)}
-                className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-[#1E2429] hover:bg-[#273038] text-[11px] font-semibold text-[#D0D7DE] border border-[#2D3640] transition"
-              >
-                <Sparkles className="w-3.5 h-3.5 text-[#CBA358]" />
-                <span className="hidden sm:inline">Acesso Rápido</span>
-                <ChevronDown className="w-3 h-3 text-[#A6B2BD]" />
-              </button>
-
-              {showDemoMenu && (
-                <div
-                  className="absolute right-0 mt-2 w-72 rounded-2xl bg-[#1A2025] border border-[#333C46] shadow-2xl p-2.5 z-50 animate-in fade-in zoom-in-95"
-                  onMouseLeave={() => setShowDemoMenu(false)}
-                >
-                  <div className="text-[10px] font-bold text-[#A6B2BD] uppercase tracking-wider px-2 py-1">
-                    Acesso ao Sistema
-                  </div>
-                  <button
-                    onClick={() => {
-                      login('belchior87@gmail.com', 'ADMIN');
-                      setShowDemoMenu(false);
-                    }}
-                    className="w-full flex items-center gap-2.5 px-2.5 py-2.5 rounded-xl text-left hover:bg-[#CBA358]/10 transition group"
-                  >
-                    <div className="w-8 h-8 rounded-xl bg-[#CBA358]/20 text-[#CBA358] border border-[#CBA358]/30 flex items-center justify-center font-bold text-xs">
-                      LH
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-xs font-bold text-[#F6F2EA] group-hover:text-[#CBA358] transition">
-                        Lucas Hoffmann (ADM)
-                      </p>
-                      <p className="text-[10px] text-[#A6B2BD] truncate">belchior87@gmail.com</p>
-                    </div>
-                  </button>
-
-                  <button
-                    onClick={() => {
-                      openAuthModal('REGISTER', 'CLIENT');
-                      setShowDemoMenu(false);
-                    }}
-                    className="w-full flex items-center gap-2.5 px-2.5 py-2.5 rounded-xl text-left hover:bg-[#262E35] transition group"
-                  >
-                    <div className="w-8 h-8 rounded-xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center justify-center font-bold text-xs">
-                      +
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-xs font-semibold text-[#F6F2EA] group-hover:text-white">Novo Cliente</p>
-                      <p className="text-[10px] text-[#A6B2BD] truncate">Cadastre seu nome e telefone</p>
-                    </div>
-                  </button>
-
-                  <div className="mt-2 pt-2 border-t border-[#2A333C] px-2 py-1 flex items-center justify-between text-[10px] text-[#A6B2BD]">
-                    <span>Base em Nuvem:</span>
-                    <span className="flex items-center gap-1 text-emerald-400 font-semibold">
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                      Firebase Firestore
-                    </span>
-                  </div>
-                </div>
-              )}
-            </div>
 
             {/* Auth Button or User Badge */}
             {currentUser ? (

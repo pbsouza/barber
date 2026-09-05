@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { X, Lock, Mail, User, Phone, ShieldCheck, ArrowRight, Sparkles } from 'lucide-react';
+import { X, Lock, Mail, User, Phone, ArrowRight } from 'lucide-react';
 
 export const AuthModal: React.FC = () => {
   const {
@@ -9,9 +9,6 @@ export const AuthModal: React.FC = () => {
     authModalMode,
     login,
     pendingBooking,
-    createBookingBatch,
-    currentUser,
-    setActiveView,
   } = useApp();
 
   const [mode, setMode] = useState<'LOGIN' | 'REGISTER'>(authModalMode);
@@ -39,15 +36,8 @@ export const AuthModal: React.FC = () => {
 
     const success = login(email, undefined, name || undefined, phone || undefined);
     if (success) {
-      // If there was a pending booking, conclude it
-      // login sets currentUser inside context, but for immediate batch we can get user object
       closeAuthModal();
     }
-  };
-
-  const handleQuickLogin = (demoEmail: string, demoRole: 'ADMIN' | 'CLIENT') => {
-    login(demoEmail, demoRole);
-    closeAuthModal();
   };
 
   return (
@@ -203,41 +193,6 @@ export const AuthModal: React.FC = () => {
             <ArrowRight className="w-4 h-4" />
           </button>
         </form>
-
-        {/* Quick Demo Access Bar */}
-        <div className="mt-6 pt-5 border-t border-[#262E35]">
-          <div className="flex items-center justify-between mb-2.5">
-            <span className="text-[11px] font-bold text-[#A6B2BD] flex items-center gap-1.5">
-              <Sparkles className="w-3.5 h-3.5 text-[#CBA358]" />
-              Acesso Rápido de Demonstração
-            </span>
-          </div>
-          <div className="grid grid-cols-2 gap-2.5">
-            <button
-              type="button"
-              onClick={() => handleQuickLogin('belchior87@gmail.com', 'ADMIN')}
-              className="flex items-center gap-2.5 p-3 rounded-2xl bg-[#CBA358]/10 hover:bg-[#CBA358]/20 border border-[#CBA358]/30 text-left transition group"
-            >
-              <ShieldCheck className="w-4 h-4 text-[#CBA358] shrink-0" />
-              <div className="min-w-0">
-                <p className="text-xs font-bold text-[#F6F2EA] group-hover:text-[#CBA358] truncate">Lucas Hoffmann</p>
-                <p className="text-[10px] text-[#A6B2BD] truncate">Administrador</p>
-              </div>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => handleQuickLogin('lucas.silveira@email.com', 'CLIENT')}
-              className="flex items-center gap-2.5 p-3 rounded-2xl bg-[#13171A] hover:bg-[#20272D] border border-[#2C343D] text-left transition group"
-            >
-              <User className="w-4 h-4 text-emerald-400 shrink-0" />
-              <div className="min-w-0">
-                <p className="text-xs font-bold text-[#F6F2EA] truncate">Cliente VIP</p>
-                <p className="text-[10px] text-[#A6B2BD] truncate">Com Assinatura</p>
-              </div>
-            </button>
-          </div>
-        </div>
       </div>
     </div>
   );

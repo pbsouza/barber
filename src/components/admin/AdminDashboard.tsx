@@ -8,6 +8,7 @@ import { AdminRevenueForecastView } from './AdminRevenueForecastView';
 import { AdminClientsReportView } from './AdminClientsReportView';
 import { AdminMetricsView } from './AdminMetricsView';
 import { AdminSubscriptionsView } from './AdminSubscriptionsView';
+import { AdminEstablishmentView } from './AdminEstablishmentView';
 import {
   Calendar,
   Clock,
@@ -22,9 +23,10 @@ import {
   Database,
   Trash2,
   CheckCircle2,
+  Building2,
 } from 'lucide-react';
 
-type AdminTab = 'BOOKINGS' | 'AVAILABILITY' | 'SERVICES' | 'SUBSCRIPTIONS' | 'CASH' | 'FORECAST' | 'CLIENTS' | 'METRICS';
+type AdminTab = 'BOOKINGS' | 'AVAILABILITY' | 'SERVICES' | 'SUBSCRIPTIONS' | 'CASH' | 'FORECAST' | 'CLIENTS' | 'METRICS' | 'ESTABLISHMENT';
 
 export const AdminDashboard: React.FC = () => {
   const { currentUser, bookings, isFirebaseConnected, clearAllTestData } = useApp();
@@ -143,6 +145,7 @@ export const AdminDashboard: React.FC = () => {
           { id: 'FORECAST', label: 'Previsão de Receita', icon: TrendingUp },
           { id: 'CLIENTS', label: 'Relatório de Clientes', icon: Users },
           { id: 'METRICS', label: 'Métricas & Picos', icon: BarChart3 },
+          { id: 'ESTABLISHMENT', label: 'Estabelecimento & Contatos', icon: Building2 },
         ].map((tab) => {
           const Icon = tab.icon;
           const isActive = currentTab === tab.id;
@@ -183,6 +186,7 @@ export const AdminDashboard: React.FC = () => {
         {currentTab === 'FORECAST' && <AdminRevenueForecastView />}
         {currentTab === 'CLIENTS' && <AdminClientsReportView />}
         {currentTab === 'METRICS' && <AdminMetricsView />}
+        {currentTab === 'ESTABLISHMENT' && <AdminEstablishmentView />}
       </div>
     </div>
   );

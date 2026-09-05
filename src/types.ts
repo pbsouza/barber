@@ -144,3 +144,23 @@ export interface RevenueForecast {
   subscriptionRevenue: number;
   totalProjectedRevenue: number;
 }
+
+export interface EstablishmentInfo {
+  name: string;
+  tagline: string;
+  address: string;
+  neighborhood: string;
+  city: string;
+  state: string;
+  postalCode: string;
+  phone: string;
+  whatsapp: string;
+  email: string;
+  adminEmail: string;
+  instagram: string;
+  googleMapsUrl?: string;
+  weekdaysHours: string;
+  saturdayHours: string;
+  sundayHours: string;
+  notes?: string;
+}
