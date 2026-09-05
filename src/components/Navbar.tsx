@@ -1,6 +1,7 @@
 import React from 'react';
 import { useApp } from '../context/AppContext';
 import { BrandLogo } from './BrandLogo';
+import { PWAInstallButton } from './PWAInstallButton';
 import {
   Calendar,
   Clock,
@@ -90,8 +91,11 @@ export const Navbar: React.FC = () => {
             )}
           </nav>
 
-          {/* Right Section: Session Countdown & User Badge */}
+          {/* Right Section: PWA Install, Session Countdown & User Badge */}
           <div className="flex items-center gap-3">
+            {/* PWA Direct Installation Button */}
+            <PWAInstallButton />
+
             {/* 5-minute Non-renewable Session Countdown Indicator */}
             {currentUser && (
               <div

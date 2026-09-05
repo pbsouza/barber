@@ -38,9 +38,32 @@ export interface SubscriptionPlan {
   includedServicesDescription: string;
   maxBookingsPerMonth: number; // -1 for unlimited
   discountPercentageOnOthers: number; // e.g. 15% discount on products/extras
+  benefits?: string[]; // Lista flexível de descrições/vantagens exibidas com checkmark abaixo do preço
   popular?: boolean;
   infinitePayUrl?: string; // Link de pagamento da carteira digital InfinitePay
   isActive?: boolean; // Se está visível/ativo para contratação
+}
+
+export function getPlanBenefits(plan?: SubscriptionPlan | null): string[] {
+  if (!plan) return [];
+  if (Array.isArray(plan.benefits) && plan.benefits.length > 0) {
+    return plan.benefits;
+  }
+  const items: string[] = [];
+  if (plan.includedServicesDescription) {
+    items.push(plan.includedServicesDescription);
+  }
+  if (plan.maxBookingsPerMonth !== undefined) {
+    items.push(
+      plan.maxBookingsPerMonth === -1
+        ? 'Cortes e agendamentos ilimitados no mês com custo zero'
+        : `${plan.maxBookingsPerMonth} cortes/mês inclusos com custo zero`
+    );
+  }
+  if (plan.discountPercentageOnOthers) {
+    items.push(`${plan.discountPercentageOnOthers}% de desconto em produtos & outros serviços`);
+  }
+  return items.length > 0 ? items : ['Benefícios exclusivos para assinantes'];
 }
 
 export interface InfinitePayConfig {

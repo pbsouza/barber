@@ -94,6 +94,11 @@ export const INITIAL_SUBSCRIPTION_PLANS: SubscriptionPlan[] = [
     includedServicesDescription: '2 Cortes de Cabelo por mês + 10% de desconto em outros serviços',
     maxBookingsPerMonth: 2,
     discountPercentageOnOthers: 10,
+    benefits: [
+      '2 Cortes de Cabelo por mês inclusos',
+      '10% de desconto em outros serviços e produtos',
+      'Agendamento prioritário no app'
+    ],
     infinitePayUrl: 'https://pay.infinitepay.io/lucashoffmannbarber/clube-essencial',
     isActive: true,
   },
@@ -105,6 +110,12 @@ export const INITIAL_SUBSCRIPTION_PLANS: SubscriptionPlan[] = [
     includedServicesDescription: 'Cortes & Barbas ILIMITADOS no mês + 1 Bebida especial por visita + 20% off em produtos',
     maxBookingsPerMonth: -1, // Unlimited
     discountPercentageOnOthers: 20,
+    benefits: [
+      'Cortes e Barboterapias ILIMITADOS no mês',
+      '1 Bebida especial cortesia a cada visita',
+      '20% de desconto em produtos de barbearia',
+      'Atendimento VIP prioritário sem fila'
+    ],
     popular: true,
     infinitePayUrl: 'https://pay.infinitepay.io/lucashoffmannbarber/clube-vip',
     isActive: true,
@@ -117,6 +128,11 @@ export const INITIAL_SUBSCRIPTION_PLANS: SubscriptionPlan[] = [
     includedServicesDescription: '4 Barboterapias completas com toalha quente no mês + 15% off em pomadas/óleos',
     maxBookingsPerMonth: 4,
     discountPercentageOnOthers: 15,
+    benefits: [
+      '4 Barboterapias completas com toalha quente no mês + 15% off em pomadas/óleos',
+      '4 cortes/mês inclusos com custo zero',
+      '15% de desconto em produtos & outros serviços'
+    ],
     infinitePayUrl: 'https://pay.infinitepay.io/lucashoffmannbarber/clube-barba',
     isActive: true,
   },

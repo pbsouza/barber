@@ -8,6 +8,7 @@ import { ClientDashboard } from './components/ClientDashboard';
 import { AdminDashboard } from './components/admin/AdminDashboard';
 import { AdminReminderModal } from './components/admin/AdminReminderModal';
 import { BrandLogo } from './components/BrandLogo';
+import { OfflineIndicator } from './components/OfflineIndicator';
 import { MapPin, Phone, Clock, ShieldCheck, Mail } from 'lucide-react';
 
 const AppContent: React.FC = () => {
@@ -62,10 +63,11 @@ const AppContent: React.FC = () => {
         )}
       </main>
 
-      {/* Global Modals */}
+      {/* Global Modals & Indicators */}
       <AuthModal />
       <SubscriptionPlansModal />
       <AdminReminderModal />
+      <OfflineIndicator />
 
       {/* Footer */}
       <footer className="mt-auto border-t border-[#262E35] bg-[#0E1214] py-10 px-4 sm:px-6 lg:px-8 text-xs text-[#A6B2BD]">

@@ -45,6 +45,10 @@
         "includedServicesDescription": { "type": "string" },
         "maxBookingsPerMonth": { "type": "number" },
         "discountPercentageOnOthers": { "type": "number" },
+        "benefits": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
         "popular": { "type": "boolean" },
         "infinitePayUrl": { "type": "string" },
         "isActive": { "type": "boolean" }

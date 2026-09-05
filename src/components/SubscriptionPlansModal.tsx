@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useApp } from '../context/AppContext';
-import { SubscriptionPlan, InfinitePayWebhookEvent } from '../types';
+import { SubscriptionPlan, InfinitePayWebhookEvent, getPlanBenefits } from '../types';
 import {
   X,
   Crown,
@@ -338,11 +338,16 @@ export const SubscriptionPlansModal: React.FC = () => {
                         : `${selectedPlanForCheckout.maxBookingsPerMonth} cortes/mês`}
                     </span>
                   </div>
-                  <div className="flex justify-between items-center pb-2 border-b border-slate-800">
-                    <span className="text-slate-400">Benefícios:</span>
-                    <span className="text-right text-slate-300 max-w-[280px]">
-                      {selectedPlanForCheckout.includedServicesDescription}
-                    </span>
+                  <div className="flex justify-between items-start pb-2 border-b border-slate-800">
+                    <span className="text-slate-400 text-xs">Benefícios Inclusos:</span>
+                    <div className="text-right text-slate-300 max-w-[280px] space-y-1">
+                      {getPlanBenefits(selectedPlanForCheckout).map((b, i) => (
+                        <div key={i} className="text-xs flex items-center justify-end gap-1.5 text-slate-200">
+                          <span>{b}</span>
+                          <Check className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                        </div>
+                      ))}
+                    </div>
                   </div>
                   <div className="flex justify-between items-center pt-1">
                     <span className="text-slate-400 font-semibold">Valor Mensal Recorrente:</span>
@@ -654,26 +659,12 @@ export const SubscriptionPlansModal: React.FC = () => {
                       </div>
 
                       <div className="space-y-2.5 text-xs text-slate-300 border-t border-slate-800 pt-4">
-                        <div className="flex items-start gap-2">
-                          <Check className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
-                          <span>{plan.includedServicesDescription}</span>
-                        </div>
-                        <div className="flex items-start gap-2">
-                          <Check className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
-                          <span>
-                            {plan.maxBookingsPerMonth === -1
-                              ? 'Cortes ilimitados no mês'
-                              : `${plan.maxBookingsPerMonth} cortes/mês inclusos`}
-                          </span>
-                        </div>
-                        <div className="flex items-start gap-2">
-                          <Check className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
-                          <span>{plan.discountPercentageOnOthers}% de desconto em produtos de barbearia</span>
-                        </div>
-                        <div className="flex items-start gap-2">
-                          <Check className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
-                          <span>Pagamento via Cartão pela InfinitePay</span>
-                        </div>
+                        {getPlanBenefits(plan).map((benefit, idx) => (
+                          <div key={idx} className="flex items-start gap-2">
+                            <Check className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                            <span className="leading-snug">{benefit}</span>
+                          </div>
+                        ))}
                       </div>
                     </div>
 

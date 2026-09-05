@@ -9,8 +9,10 @@ import {
   XCircle,
   Scissors,
   CheckCircle,
+  Check,
   HelpCircle,
 } from 'lucide-react';
+import { getPlanBenefits } from '../types';
 
 export const ClientDashboard: React.FC = () => {
   const {
@@ -102,10 +104,15 @@ export const ClientDashboard: React.FC = () => {
             {activePlan ? (
               <div>
                 <h3 className="text-base font-bold text-white">{activePlan.name}</h3>
-                <p className="text-xs text-slate-400 mt-1 leading-relaxed">
-                  {activePlan.includedServicesDescription}
-                </p>
-                <p className="text-xs font-bold text-amber-300 mt-2">
+                <div className="mt-2 space-y-1">
+                  {getPlanBenefits(activePlan).map((b, i) => (
+                    <div key={i} className="text-xs text-slate-300 flex items-center gap-1.5">
+                      <Check className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                      <span>{b}</span>
+                    </div>
+                  ))}
+                </div>
+                <p className="text-xs font-bold text-amber-300 mt-2.5">
                   R$ {activePlan.monthlyPrice.toFixed(2).replace('.', ',')}/mês
                 </p>
               </div>

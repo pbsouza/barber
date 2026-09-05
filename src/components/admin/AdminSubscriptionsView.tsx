@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
-import { SubscriptionPlan, InfinitePayWebhookEvent } from '../../types';
+import { SubscriptionPlan, InfinitePayWebhookEvent, getPlanBenefits } from '../../types';
 import {
   Crown,
   CreditCard,
@@ -8,6 +8,8 @@ import {
   Edit2,
   Trash2,
   Check,
+  ChevronUp,
+  ChevronDown,
   X,
   ExternalLink,
   Copy,
@@ -108,6 +110,35 @@ export const AdminSubscriptionsView: React.FC = () => {
   const [planInfinitePayUrl, setPlanInfinitePayUrl] = useState('');
   const [planPopular, setPlanPopular] = useState(false);
   const [planActive, setPlanActive] = useState(true);
+  const [planBenefits, setPlanBenefits] = useState<string[]>([]);
+
+  const handleAddBenefit = (text = '') => {
+    setPlanBenefits((prev) => [...prev, text]);
+  };
+
+  const handleUpdateBenefit = (index: number, text: string) => {
+    setPlanBenefits((prev) => {
+      const copy = [...prev];
+      copy[index] = text;
+      return copy;
+    });
+  };
+
+  const handleRemoveBenefit = (index: number) => {
+    setPlanBenefits((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const handleMoveBenefit = (index: number, direction: 'up' | 'down') => {
+    setPlanBenefits((prev) => {
+      const copy = [...prev];
+      const targetIndex = direction === 'up' ? index - 1 : index + 1;
+      if (targetIndex < 0 || targetIndex >= copy.length) return prev;
+      const temp = copy[index];
+      copy[index] = copy[targetIndex];
+      copy[targetIndex] = temp;
+      return copy;
+    });
+  };
 
   // QR Code preview modal
   const [qrModal, setQrModal] = useState<{ title: string; url: string } | null>(null);
@@ -336,6 +367,11 @@ export const AdminSubscriptionsView: React.FC = () => {
     setMaxBookingsPerMonth(2);
     setDiscountPercentageOnOthers(15);
     setIncludedServicesDescription('2 Cortes de Cabelo por mês + 15% de desconto em outros serviços');
+    setPlanBenefits([
+      '2 Cortes de Cabelo por mês inclusos',
+      '15% de desconto em produtos & outros serviços',
+      'Agendamento prioritário no app'
+    ]);
     setPlanInfinitePayUrl('');
     setPlanPopular(false);
     setPlanActive(true);
@@ -349,8 +385,13 @@ export const AdminSubscriptionsView: React.FC = () => {
     setMonthlyPrice(plan.monthlyPrice);
     setIsUnlimitedBookings(plan.maxBookingsPerMonth === -1);
     setMaxBookingsPerMonth(plan.maxBookingsPerMonth === -1 ? 4 : plan.maxBookingsPerMonth);
-    setDiscountPercentageOnOthers(plan.discountPercentageOnOthers);
-    setIncludedServicesDescription(plan.includedServicesDescription);
+    setDiscountPercentageOnOthers(plan.discountPercentageOnOthers || 0);
+    setIncludedServicesDescription(plan.includedServicesDescription || '');
+    
+    // Obter lista flexível de benefícios
+    const currentBenefits = getPlanBenefits(plan);
+    setPlanBenefits(currentBenefits.length > 0 ? [...currentBenefits] : ['']);
+
     setPlanInfinitePayUrl(plan.infinitePayUrl || '');
     setPlanPopular(Boolean(plan.popular));
     setPlanActive(plan.isActive !== false);
@@ -362,6 +403,7 @@ export const AdminSubscriptionsView: React.FC = () => {
     if (!planName.trim()) return;
 
     const computedMaxBookings = isUnlimitedBookings ? -1 : Math.max(1, Number(maxBookingsPerMonth));
+    const cleanBenefits = planBenefits.map((b) => b.trim()).filter(Boolean);
 
     const planPayload = {
       name: planName.trim(),
@@ -369,7 +411,8 @@ export const AdminSubscriptionsView: React.FC = () => {
       monthlyPrice: Number(monthlyPrice),
       maxBookingsPerMonth: computedMaxBookings,
       discountPercentageOnOthers: Number(discountPercentageOnOthers) || 0,
-      includedServicesDescription: includedServicesDescription.trim(),
+      includedServicesDescription: cleanBenefits[0] || includedServicesDescription.trim() || 'Benefícios inclusos no plano',
+      benefits: cleanBenefits.length > 0 ? cleanBenefits : undefined,
       infinitePayUrl: planInfinitePayUrl.trim() || undefined,
       popular: planPopular,
       isActive: planActive,
@@ -1089,23 +1132,12 @@ export const AdminSubscriptionsView: React.FC = () => {
                   </div>
 
                   <div className="space-y-2 text-xs text-slate-300 border-t border-slate-800 pt-3">
-                    <div className="flex items-start gap-2">
-                      <Check className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
-                      <span>{plan.includedServicesDescription}</span>
-                    </div>
-                    <div className="flex items-start gap-2">
-                      <Check className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
-                      <span>
-                        <strong>
-                          {plan.maxBookingsPerMonth === -1 ? 'Cortes Ilimitados' : `${plan.maxBookingsPerMonth} cortes/mês`}
-                        </strong>{' '}
-                        inclusos com custo zero
-                      </span>
-                    </div>
-                    <div className="flex items-start gap-2">
-                      <Check className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
-                      <span>{plan.discountPercentageOnOthers}% de desconto em produtos & outros serviços</span>
-                    </div>
+                    {getPlanBenefits(plan).map((benefit, idx) => (
+                      <div key={idx} className="flex items-start gap-2">
+                        <Check className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                        <span className="leading-snug">{benefit}</span>
+                      </div>
+                    ))}
                   </div>
 
                   {/* InfinitePay Link status for this plan */}
@@ -1435,16 +1467,113 @@ export const AdminSubscriptionsView: React.FC = () => {
                 )}
               </div>
 
-              <div>
-                <label className="block font-bold text-slate-300 mb-1">Detalhamento dos Benefícios Inclusos *</label>
-                <textarea
-                  rows={2}
-                  value={includedServicesDescription}
-                  onChange={(e) => setIncludedServicesDescription(e.target.value)}
-                  placeholder="Ex: 2 Cortes de Cabelo por mês + 10% de desconto em outros serviços e barbearia"
-                  className="w-full bg-slate-900 border border-slate-800 rounded-xl p-3 text-white placeholder-slate-500 focus:outline-none focus:border-amber-500"
-                  required
-                />
+              {/* Descrições e Benefícios Personalizados do Plano (Flexível) */}
+              <div className="p-4 rounded-2xl bg-slate-900/90 border border-slate-800 space-y-3">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <div>
+                    <label className="block font-bold text-white text-sm flex items-center gap-2">
+                      <Sparkles className="w-4 h-4 text-amber-400" />
+                      Descrições & Vantagens Abaixo do Preço *
+                    </label>
+                    <p className="text-[11px] text-slate-400 mt-0.5">
+                      Você tem total liberdade para adicionar quantas descrições quiser com o texto que desejar. Cada linha aparecerá com o ícone (✓) abaixo do preço.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleAddBenefit('')}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-400 border border-amber-500/40 text-xs font-bold transition self-start sm:self-auto shrink-0"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Adicionar Linha</span>
+                  </button>
+                </div>
+
+                {/* Sugestões rápidas para facilitar o cadastro */}
+                <div className="pt-1">
+                  <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider mr-2">Sugestões rápidas (clique para incluir):</span>
+                  <div className="flex flex-wrap gap-1.5 mt-1.5">
+                    {[
+                      'Cortes & Barbas ILIMITADOS no mês',
+                      '2 Cortes de Cabelo por mês',
+                      '4 Barboterapias completas com toalha quente no mês',
+                      '15% de desconto em pomadas, óleos e balms',
+                      '1 Bebida especial cortesia a cada visita',
+                      'Atendimento VIP prioritário sem fila',
+                      'Lavagem especial e alinhamento de fios'
+                    ].map((sug, i) => (
+                      <button
+                        key={i}
+                        type="button"
+                        onClick={() => handleAddBenefit(sug)}
+                        className="text-[10px] bg-slate-800/90 hover:bg-slate-700 hover:text-amber-300 text-slate-300 px-2.5 py-1 rounded-full border border-slate-700/80 transition flex items-center gap-1"
+                      >
+                        <Plus className="w-2.5 h-2.5 text-amber-400" />
+                        {sug}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Lista dinâmica de benefícios */}
+                <div className="space-y-2 pt-2">
+                  {planBenefits.map((benefit, idx) => (
+                    <div
+                      key={idx}
+                      className="flex items-center gap-2 bg-slate-950/90 p-2 rounded-xl border border-slate-800 focus-within:border-amber-500/60 transition group"
+                    >
+                      <div className="w-6 h-6 rounded-lg bg-amber-500/10 text-amber-400 flex items-center justify-center shrink-0">
+                        <Check className="w-3.5 h-3.5" />
+                      </div>
+
+                      <input
+                        type="text"
+                        value={benefit}
+                        onChange={(e) => handleUpdateBenefit(idx, e.target.value)}
+                        placeholder={`Ex: Benefício ou vantagem #${idx + 1}...`}
+                        className="flex-1 bg-transparent border-0 text-white text-xs placeholder-slate-500 focus:outline-none focus:ring-0"
+                      />
+
+                      {/* Reordenar para Cima */}
+                      <button
+                        type="button"
+                        disabled={idx === 0}
+                        onClick={() => handleMoveBenefit(idx, 'up')}
+                        title="Mover para cima"
+                        className="p-1 text-slate-400 hover:text-white disabled:opacity-20 transition"
+                      >
+                        <ChevronUp className="w-4 h-4" />
+                      </button>
+
+                      {/* Reordenar para Baixo */}
+                      <button
+                        type="button"
+                        disabled={idx === planBenefits.length - 1}
+                        onClick={() => handleMoveBenefit(idx, 'down')}
+                        title="Mover para baixo"
+                        className="p-1 text-slate-400 hover:text-white disabled:opacity-20 transition"
+                      >
+                        <ChevronDown className="w-4 h-4" />
+                      </button>
+
+                      {/* Excluir Linha */}
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveBenefit(idx)}
+                        title="Excluir este benefício"
+                        className="p-1 text-slate-500 hover:text-red-400 transition"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ))}
+
+                  {planBenefits.length === 0 && (
+                    <div className="text-center py-4 px-3 border border-dashed border-slate-800 rounded-xl text-slate-500 text-xs">
+                      Nenhuma descrição cadastrada. Clique em <strong className="text-amber-400 font-bold">"Adicionar Linha"</strong> ou escolha uma sugestão rápida acima para personalizar!
+                    </div>
+                  )}
+                </div>
               </div>
 
               {/* Plan specific InfinitePay URL */}
