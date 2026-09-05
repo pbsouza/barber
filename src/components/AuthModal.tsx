@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
+import { BrandLogo } from './BrandLogo';
 import { X, Lock, Mail, User, Phone, ArrowRight } from 'lucide-react';
 
 export const AuthModal: React.FC = () => {
@@ -52,8 +53,8 @@ export const AuthModal: React.FC = () => {
 
         {/* Modal Header */}
         <div className="text-center mb-6">
-          <div className="w-14 h-14 rounded-2xl bg-gradient-to-b from-[#2A333C] to-[#161B1F] border border-[#CBA358]/40 p-1 flex items-center justify-center mx-auto mb-3 shadow-lg shadow-black/60">
-            <img src="/favicon.png" alt="Lucas Hoffmann" className="w-full h-full object-cover rounded-xl" />
+          <div className="flex justify-center mb-3">
+            <BrandLogo variant="icon" />
           </div>
           <h2 className="text-2xl font-black text-[#F6F2EA] font-['Cabinet_Grotesk',sans-serif] uppercase tracking-wide">
             {mode === 'LOGIN' ? 'Acessar Conta' : 'Criar Cadastro'}

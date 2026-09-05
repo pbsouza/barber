@@ -1,10 +1,49 @@
 import React, { useState } from 'react';
+import emblemImg from '../assets/images/lucas_hoffmann_favicon_1788556005744.jpg';
+import fullLogoImg from '../assets/images/lucas_hoffmann_logo_1788556017884.jpg';
 
 interface BrandLogoProps {
   variant?: 'full' | 'compact' | 'icon' | 'badge';
   className?: string;
   showSubtitle?: boolean;
 }
+
+export const BrasaoShieldCrest: React.FC<{ className?: string }> = ({ className = 'w-7 h-7' }) => (
+  <svg viewBox="0 0 128 128" className={className} fill="none" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <linearGradient id="shieldGoldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+        <stop offset="0%" stopColor="#F5D77F" />
+        <stop offset="50%" stopColor="#CBA358" />
+        <stop offset="100%" stopColor="#9E782E" />
+      </linearGradient>
+    </defs>
+    {/* Outer Shield Crest */}
+    <path
+      d="M 64 16 C 80 16, 96 11, 96 11 C 98 44, 96 80, 64 112 C 32 80, 30 44, 32 11 C 32 11, 48 16, 64 16 Z"
+      stroke="url(#shieldGoldGrad)"
+      strokeWidth="5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      fill="#181D21"
+    />
+    {/* Inner detail border */}
+    <path
+      d="M 64 24 C 77 24, 88 20, 88 20 C 90 46, 88 74, 64 100 C 40 74, 38 46, 40 20 C 40 20, 51 24, 64 24 Z"
+      stroke="url(#shieldGoldGrad)"
+      strokeWidth="1.5"
+      strokeOpacity="0.4"
+      fill="none"
+    />
+    {/* Crossed scissors and razor */}
+    <g stroke="url(#shieldGoldGrad)" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round" fill="none">
+      <line x1="42" y1="84" x2="86" y2="40" strokeWidth="4.5" />
+      <circle cx="40" cy="88" r="8" strokeWidth="3" />
+      <circle cx="64" cy="62" r="2.5" fill="#CBA358" stroke="none" />
+      <path d="M 88 88 L 68 64 L 54 44 C 52 38, 58 32, 66 38 L 84 56 Z" strokeWidth="3.5" fill="#CBA358" fillOpacity="0.25" />
+      <circle cx="88" cy="88" r="7" strokeWidth="3" />
+    </g>
+  </svg>
+);
 
 export const BrandLogo: React.FC<BrandLogoProps> = ({
   variant = 'compact',
@@ -13,26 +52,22 @@ export const BrandLogo: React.FC<BrandLogoProps> = ({
 }) => {
   const [imgError, setImgError] = useState(false);
 
-  // Icon only: Shield with Scissors & Razor (Image 2 - Favicon / Emblem)
+  // Icon only: Shield with Scissors & Razor (Emblem / Brasão)
   if (variant === 'icon') {
     return (
       <div className={`relative inline-flex items-center justify-center ${className}`}>
-        <div className="w-11 h-11 rounded-2xl bg-gradient-to-b from-[#2A333C] to-[#161B1F] p-[1.5px] shadow-lg shadow-[#CBA358]/10 border border-[#CBA358]/40 group-hover:border-[#CBA358] transition-all duration-300">
+        <div className="w-12 h-12 rounded-2xl bg-gradient-to-b from-[#2A333C] to-[#161B1F] p-[1.5px] shadow-lg shadow-[#CBA358]/15 border border-[#CBA358]/40 group-hover:border-[#CBA358] transition-all duration-300">
           <div className="w-full h-full rounded-[14px] overflow-hidden bg-[#181D21] flex items-center justify-center">
             {!imgError ? (
               <img
-                src="/favicon.png"
-                alt="Lucas Hoffmann Barber"
+                src={emblemImg}
+                alt="Brasão Lucas Hoffmann Barber"
                 onError={() => setImgError(true)}
                 referrerPolicy="no-referrer"
                 className="w-full h-full object-cover p-1"
               />
             ) : (
-              <svg viewBox="0 0 100 100" className="w-7 h-7 text-[#CBA358]" fill="none" stroke="currentColor">
-                <path d="M50 15 C65 15 75 12 75 12 C77 38 75 62 50 85 C25 62 23 38 25 12 C25 12 35 15 50 15 Z" strokeWidth="4" />
-                <path d="M36 68 L64 32 M34 72 A6 6 0 1 0 46 72 A6 6 0 1 0 34 72" strokeWidth="3" />
-                <path d="M68 68 L52 48 L42 34 C40 30 46 26 52 30 L66 44" strokeWidth="3" />
-              </svg>
+              <BrasaoShieldCrest className="w-7 h-7" />
             )}
           </div>
         </div>
@@ -49,14 +84,14 @@ export const BrandLogo: React.FC<BrandLogoProps> = ({
             <div className="w-full h-full rounded-[14px] overflow-hidden bg-[#181D21] flex items-center justify-center">
               {!imgError ? (
                 <img
-                  src="/favicon.png"
-                  alt="Lucas Hoffmann Barber"
+                  src={emblemImg}
+                  alt="Brasão Lucas Hoffmann Barber"
                   onError={() => setImgError(true)}
                   referrerPolicy="no-referrer"
                   className="w-full h-full object-cover p-1 group-hover:scale-105 transition-transform duration-300"
                 />
               ) : (
-                <div className="text-[#CBA358] font-bold text-base">LH</div>
+                <BrasaoShieldCrest className="w-7 h-7" />
               )}
             </div>
           </div>
@@ -94,13 +129,19 @@ export const BrandLogo: React.FC<BrandLogoProps> = ({
     <div className={`flex flex-col items-center text-center ${className}`}>
       <div className="relative mb-4 group max-w-[280px] sm:max-w-[340px]">
         <div className="rounded-3xl p-1 bg-gradient-to-b from-[#2F3740] via-[#20272E] to-[#14181B] border border-[#CBA358]/40 shadow-2xl shadow-black/80">
-          <img
-            src="/logo.jpg"
-            alt="Lucas Hoffmann Barber - Logomarca Oficial"
-            onError={() => setImgError(true)}
-            referrerPolicy="no-referrer"
-            className="w-full h-auto rounded-[22px] object-contain shadow-inner"
-          />
+          {!imgError ? (
+            <img
+              src={fullLogoImg}
+              alt="Lucas Hoffmann Barber - Logomarca Oficial"
+              onError={() => setImgError(true)}
+              referrerPolicy="no-referrer"
+              className="w-full h-auto rounded-[22px] object-contain shadow-inner"
+            />
+          ) : (
+            <div className="p-8 flex flex-col items-center justify-center">
+              <BrasaoShieldCrest className="w-20 h-20 mb-2" />
+            </div>
+          )}
         </div>
       </div>
 

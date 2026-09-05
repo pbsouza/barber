@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
+import { BrandLogo } from '../BrandLogo';
 import { EstablishmentInfo } from '../../types';
 import {
   Building2,
@@ -392,8 +393,8 @@ export const AdminEstablishmentView: React.FC = () => {
 
             {/* Shop Card */}
             <div className="text-center py-2">
-              <div className="w-14 h-14 rounded-2xl bg-[#2A333C] border border-[#CBA358]/40 p-1 flex items-center justify-center mx-auto mb-3 shadow-lg shadow-black/60">
-                <img src="/favicon.png" alt="Lucas Hoffmann" className="w-full h-full object-cover rounded-xl" />
+              <div className="flex justify-center mb-3">
+                <BrandLogo variant="icon" />
               </div>
               <h4 className="text-lg font-black text-[#F6F2EA] font-['Cabinet_Grotesk',sans-serif] uppercase tracking-wide">
                 {formData.name || 'Lucas Hoffmann Barber'}
