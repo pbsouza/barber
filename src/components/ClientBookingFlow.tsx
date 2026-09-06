@@ -646,7 +646,7 @@ export const ClientBookingFlow: React.FC = () => {
                     </div>
                     <div className="flex items-center gap-2 mt-1">
                       <span className="text-[11px] text-slate-400">
-                        Pague no local ou com Cartão via InfinitePay
+                        Pague no local ou com Cartão / PIX Online
                       </span>
                       {infinitePayConfig.enabled && infinitePayConfig.defaultUrl && (
                         <a
@@ -656,7 +656,7 @@ export const ClientBookingFlow: React.FC = () => {
                           className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-400 hover:text-emerald-300 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20"
                         >
                           <CreditCard className="w-3 h-3" />
-                          <span>Link InfinitePay</span>
+                          <span>Pagar com Cartão ou PIX</span>
                           <ExternalLink className="w-2.5 h-2.5" />
                         </a>
                       )}

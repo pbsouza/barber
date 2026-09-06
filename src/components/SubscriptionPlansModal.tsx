@@ -150,9 +150,9 @@ export const SubscriptionPlansModal: React.FC = () => {
           setActivationSuccess(false);
         }, 2500);
       } else {
-        // Payment NOT confirmed by InfinitePay: DO NOT ACTIVATE!
+        // Payment NOT confirmed: DO NOT ACTIVATE!
         setVerificationError(
-          `Pagamento ainda não confirmado pela InfinitePay para o código "${targetNsu}". Se você acabou de efetuar o pagamento pelo link, aguarde alguns segundos ou envie o comprovante no WhatsApp.`
+          `Pagamento ainda não confirmado para o código "${targetNsu}". Se você acabou de efetuar o pagamento pelo link, aguarde alguns segundos ou envie o comprovante no WhatsApp.`
         );
       }
     } catch (err: any) {
@@ -313,7 +313,7 @@ export const SubscriptionPlansModal: React.FC = () => {
                 <div className="text-center">
                   <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-bold mb-2">
                     <CreditCard className="w-3.5 h-3.5" />
-                    Pagamento com Cartão via InfinitePay
+                    Pagamento Seguro no Cartão ou PIX
                   </div>
                   <h3 className="text-2xl font-extrabold text-white">Finalizar Assinatura</h3>
                   <p className="text-xs text-slate-400 mt-1">
@@ -357,7 +357,7 @@ export const SubscriptionPlansModal: React.FC = () => {
                   </div>
                 </div>
 
-                {/* InfinitePay Digital Wallet Link Box */}
+                {/* Payment Link Box */}
                 <div className="p-5 rounded-2xl bg-gradient-to-br from-emerald-950/40 via-slate-900 to-slate-900 border border-emerald-500/30 space-y-4">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
@@ -365,8 +365,8 @@ export const SubscriptionPlansModal: React.FC = () => {
                         <CreditCard className="w-4 h-4" />
                       </div>
                       <div>
-                        <p className="text-xs font-bold text-white">Carteira Digital InfinitePay</p>
-                        <p className="text-[10px] text-emerald-400 font-medium">Cartão de Crédito e Débito</p>
+                        <p className="text-xs font-bold text-white">Pagamento Seguro Online</p>
+                        <p className="text-[10px] text-emerald-400 font-medium">Cartão de Crédito, Débito ou PIX</p>
                       </div>
                     </div>
                     <span className="text-[10px] uppercase font-extrabold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
@@ -380,7 +380,7 @@ export const SubscriptionPlansModal: React.FC = () => {
                       <div className="flex items-center justify-between">
                         <span className="flex items-center gap-1.5 text-xs font-extrabold text-emerald-400">
                           <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                          Pagamento Detectado no Firebase!
+                          Pagamento Detectado com Sucesso!
                         </span>
                         <span className="text-[10px] uppercase font-mono px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-bold">
                           {recentWebhookEvent.capture_method === 'pix' ? 'PIX' : 'Cartão de Crédito'}
@@ -440,16 +440,16 @@ export const SubscriptionPlansModal: React.FC = () => {
                     </div>
                   )}
 
-                  {/* Real-time Webhook Waiting Indicator */}
+                  {/* Real-time Waiting Indicator */}
                   <div className="p-2.5 bg-cyan-950/20 rounded-xl border border-cyan-500/20 flex items-center gap-2.5">
                     <span className="w-2 h-2 rounded-full bg-cyan-400 animate-ping shrink-0" />
                     <span className="text-[11px] text-slate-300">
-                      Monitorando confirmações em tempo real via <strong>Firebase Firestore</strong>. Assim que você pagar no link, o sistema reconhece seu recibo automaticamente!
+                      Monitorando confirmações em tempo real. Assim que você pagar no link, o sistema reconhece seu comprovante automaticamente!
                     </span>
                   </div>
 
                   <p className="text-xs text-slate-300 leading-relaxed">
-                    Clique no botão abaixo para abrir o link de pagamento seguro da <strong>InfinitePay</strong> ou escaneie o QR Code no seu celular com a câmera ou app da carteira.
+                    Clique no botão abaixo para abrir o link de pagamento seguro ou escaneie o QR Code no seu celular com a câmera ou app do banco.
                   </p>
 
                   {/* QR Code preview */}
@@ -459,7 +459,7 @@ export const SubscriptionPlansModal: React.FC = () => {
                         src={`https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=${encodeURIComponent(
                           effectiveInfinitePayUrl
                         )}`}
-                        alt="QR Code InfinitePay"
+                        alt="QR Code Pagamento Seguro"
                         className="w-20 h-20"
                       />
                     </div>
@@ -497,7 +497,7 @@ export const SubscriptionPlansModal: React.FC = () => {
                     className="w-full py-3.5 px-4 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-slate-950 font-extrabold text-xs transition shadow-lg shadow-emerald-500/25 flex items-center justify-center gap-2"
                   >
                     <CreditCard className="w-4 h-4" />
-                    <span>Pagar no Cartão via InfinitePay</span>
+                    <span>Pagar com Cartão ou PIX Online</span>
                     <ExternalLink className="w-4 h-4" />
                   </a>
                 </div>
@@ -507,12 +507,12 @@ export const SubscriptionPlansModal: React.FC = () => {
                   <div className="p-4 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-200 text-xs space-y-2 animate-in fade-in">
                     <div className="flex items-center gap-2 font-bold text-rose-400">
                       <AlertCircle className="w-4 h-4 shrink-0" />
-                      <span>Pagamento não confirmado pela InfinitePay</span>
+                      <span>Pagamento ainda não confirmado</span>
                     </div>
                     <p className="text-slate-300 leading-relaxed">{verificationError}</p>
                     <div className="text-[11px] text-slate-400 space-y-1 pt-1 border-t border-rose-500/20">
-                      <p>• Certifique-se de ter concluído o pagamento pelo link ou QR Code da InfinitePay acima.</p>
-                      <p>• Se você acabou de pagar no cartão, aguarde alguns segundos pela compensação e tente novamente.</p>
+                      <p>• Certifique-se de ter concluído o pagamento pelo link ou QR Code acima.</p>
+                      <p>• Se você acabou de pagar no cartão ou PIX, aguarde alguns segundos pela compensação e tente novamente.</p>
                       <p>• Se pagou via PIX ou dinheiro direto com o barbeiro, utilize a opção do WhatsApp abaixo.</p>
                     </div>
                   </div>
@@ -521,7 +521,7 @@ export const SubscriptionPlansModal: React.FC = () => {
                 {/* Optional NSU / Receipt input */}
                 <div className="p-3 bg-slate-950/60 rounded-xl border border-slate-800 space-y-1.5">
                   <label className="block text-[11px] font-medium text-slate-300">
-                    Código do Recibo, NSU ou Link InfinitePay:
+                    Código do Recibo, NSU ou Link do Comprovante:
                   </label>
                   <input
                     type="text"
@@ -536,7 +536,7 @@ export const SubscriptionPlansModal: React.FC = () => {
                   />
                   <p className="text-[10px] text-slate-500">
                     {recentWebhookEvent
-                      ? 'Um pagamento recente já foi identificado no Firebase acima! Você também pode informar outro código se necessário.'
+                      ? 'Um pagamento recente já foi identificado acima! Você também pode informar outro código se necessário.'
                       : 'Cole o código NSU, identificador da fatura ou link do comprovante gerado após o pagamento.'}
                   </p>
                 </div>
@@ -551,7 +551,7 @@ export const SubscriptionPlansModal: React.FC = () => {
                     {isVerifying ? (
                       <>
                         <RefreshCw className="w-4 h-4 animate-spin" />
-                        <span>Consultando aprovação InfinitePay...</span>
+                        <span>Consultando aprovação do pagamento...</span>
                       </>
                     ) : isActivating ? (
                       <span>Ativando plano na sua conta...</span>
@@ -605,7 +605,7 @@ export const SubscriptionPlansModal: React.FC = () => {
 
                   <p className="text-[11px] text-center text-slate-500 mt-2 flex items-center justify-center gap-1">
                     <Lock className="w-3 h-3" />
-                    A assinatura só é liberada com verificação automática do pagamento pela InfinitePay
+                    A assinatura é liberada com verificação e confirmação automática do pagamento seguro
                   </p>
                 </div>
               </>
@@ -623,7 +623,8 @@ export const SubscriptionPlansModal: React.FC = () => {
                 Visual Impecável O Ano Todo
               </h2>
               <p className="text-xs sm:text-sm text-slate-400 mt-1">
-                Economize até 50% em relação a cortes avulsos, tenha prioridade na agenda e pague no cartão via InfinitePay.
+                {infinitePayConfig.plansSubtitle ||
+                  'Economize até 50% em relação a cortes avulsos, tenha prioridade na agenda e pague com segurança no cartão ou PIX.'}
               </p>
             </div>
 
@@ -686,7 +687,7 @@ export const SubscriptionPlansModal: React.FC = () => {
                               : 'bg-slate-800 hover:bg-slate-700 text-slate-100'
                           }`}
                         >
-                          <span>{currentUser ? 'Assinar com InfinitePay' : 'Entrar e Assinar'}</span>
+                          <span>{currentUser ? 'Assinar Plano Agora' : 'Entrar e Assinar'}</span>
                           <Sparkles className="w-3.5 h-3.5" />
                         </button>
                       )}
@@ -700,7 +701,8 @@ export const SubscriptionPlansModal: React.FC = () => {
             <div className="mt-8 p-4 rounded-2xl bg-slate-900/80 border border-slate-800 flex items-center justify-center gap-3 text-xs text-slate-400 text-center">
               <ShieldCheck className="w-5 h-5 text-emerald-400 shrink-0" />
               <span>
-                Cobrança recorrente com Cartão de Crédito pela carteira digital InfinitePay. Sem fidelidade, cancele quando desejar.
+                {infinitePayConfig.guaranteeBannerText ||
+                  'Cobrança recorrente no Cartão de Crédito ou PIX com segurança garantida. Sem fidelidade, cancele quando desejar.'}
               </span>
             </div>
           </>

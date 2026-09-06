@@ -72,6 +72,8 @@ export interface InfinitePayConfig {
   enabled: boolean;
   notes?: string;
   serverWebhookUrl?: string; // URL do servidor backend para receber POST da InfinitePay
+  plansSubtitle?: string; // Subtítulo exibido no topo do modal de planos de assinatura
+  guaranteeBannerText?: string; // Texto exibido no banner de garantia no rodapé do modal
 }
 
 export interface InfinitePayWebhookEvent {

@@ -93,7 +93,16 @@ export const AdminSubscriptionsView: React.FC = () => {
   const [defaultUrl, setDefaultUrl] = useState(infinitePayConfig.defaultUrl || 'https://pay.infinitepay.io/lucashoffmannbarber');
   const [enabled, setEnabled] = useState(infinitePayConfig.enabled ?? true);
   const [notes, setNotes] = useState(infinitePayConfig.notes || '');
+  const [plansSubtitle, setPlansSubtitle] = useState(
+    infinitePayConfig.plansSubtitle ??
+      'Economize até 50% em relação a cortes avulsos, tenha prioridade na agenda e pague com segurança no cartão ou PIX.'
+  );
+  const [guaranteeBannerText, setGuaranteeBannerText] = useState(
+    infinitePayConfig.guaranteeBannerText ??
+      'Cobrança recorrente no Cartão de Crédito ou PIX com segurança garantida. Sem fidelidade, cancele quando desejar.'
+  );
   const [saveSuccessMsg, setSaveSuccessMsg] = useState('');
+  const [saveTextsSuccessMsg, setSaveTextsSuccessMsg] = useState('');
   const [copiedUrl, setCopiedUrl] = useState<string | null>(null);
 
   // Plans form state
@@ -330,6 +339,15 @@ export const AdminSubscriptionsView: React.FC = () => {
     testWebhookHealth();
   }, []);
 
+  useEffect(() => {
+    if (infinitePayConfig.plansSubtitle) {
+      setPlansSubtitle(infinitePayConfig.plansSubtitle);
+    }
+    if (infinitePayConfig.guaranteeBannerText) {
+      setGuaranteeBannerText(infinitePayConfig.guaranteeBannerText);
+    }
+  }, [infinitePayConfig.plansSubtitle, infinitePayConfig.guaranteeBannerText]);
+
   // Calculations & stats
   const activeSubscribers = (users || []).filter((u) => Boolean(u.subscriptionId));
   const activePlansCount = (plans || []).filter((p) => p.isActive !== false).length;
@@ -346,9 +364,30 @@ export const AdminSubscriptionsView: React.FC = () => {
       enabled,
       notes: notes.trim(),
       serverWebhookUrl: serverWebhookUrlInput.trim(),
+      plansSubtitle: plansSubtitle.trim(),
+      guaranteeBannerText: guaranteeBannerText.trim(),
     });
-    setSaveSuccessMsg('Configurações da InfinitePay salvas com sucesso!');
+    setSaveSuccessMsg('Configurações salvas com sucesso!');
     setTimeout(() => setSaveSuccessMsg(''), 4000);
+  };
+
+  const handleSavePresentationTexts = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    await updateInfinitePayConfig({
+      plansSubtitle: plansSubtitle.trim(),
+      guaranteeBannerText: guaranteeBannerText.trim(),
+    });
+    setSaveTextsSuccessMsg('Subtítulo e banner de garantia salvos com sucesso!');
+    setTimeout(() => setSaveTextsSuccessMsg(''), 4000);
+  };
+
+  const handleResetDefaultTexts = () => {
+    const defaultSub =
+      'Economize até 50% em relação a cortes avulsos, tenha prioridade na agenda e pague com segurança no cartão ou PIX.';
+    const defaultGuarantee =
+      'Cobrança recorrente no Cartão de Crédito ou PIX com segurança garantida. Sem fidelidade, cancele quando desejar.';
+    setPlansSubtitle(defaultSub);
+    setGuaranteeBannerText(defaultGuarantee);
   };
 
   const handleCopyLink = (url: string) => {
@@ -1028,7 +1067,7 @@ export const AdminSubscriptionsView: React.FC = () => {
                             target="_blank"
                             rel="noopener noreferrer"
                             className="px-2 py-1 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 text-[11px] font-semibold border border-emerald-500/20 transition inline-flex items-center gap-1"
-                            title="Abrir Recibo Oficial InfinitePay"
+                            title="Abrir Recibo Oficial"
                           >
                             <ExternalLink className="w-3 h-3" />
                             <span>Recibo</span>
@@ -1051,6 +1090,136 @@ export const AdminSubscriptionsView: React.FC = () => {
               </table>
             </div>
           )}
+        </div>
+      </div>
+
+      {/* Customization of Client Subscription Modal Presentation (Subtitle and Guarantee Banner) */}
+      <div className="bg-gradient-to-br from-[#1e293b] via-[#1a2333] to-[#0f172a] border border-amber-500/30 rounded-3xl p-6 md:p-8 shadow-2xl space-y-6 relative overflow-hidden">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-5 border-b border-slate-800">
+          <div className="flex items-center gap-4">
+            <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-amber-500 to-amber-700 flex items-center justify-center text-slate-950 font-extrabold shadow-xl shadow-amber-500/20">
+              <Crown className="w-7 h-7" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                  Apresentação ao Cliente
+                </span>
+                <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 border border-slate-700">
+                  Modal de Assinaturas
+                </span>
+              </div>
+              <h3 className="text-xl sm:text-2xl font-extrabold text-white mt-1">
+                Subtítulo dos Planos e Banner de Garantia
+              </h3>
+              <p className="text-xs text-slate-400 mt-0.5 max-w-2xl">
+                Personalize os textos exibidos no cabeçalho e no rodapé da janela de planos quando o cliente vai assinar.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleResetDefaultTexts}
+              className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold border border-slate-700 transition flex items-center gap-1.5 cursor-pointer"
+              title="Restaurar textos padrão recomendados"
+            >
+              <RefreshCw className="w-3.5 h-3.5 text-slate-400" />
+              <span>Restaurar Padrão</span>
+            </button>
+            <button
+              type="button"
+              onClick={handleSavePresentationTexts}
+              className="px-4 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-extrabold text-xs transition shadow-lg shadow-amber-500/20 flex items-center gap-1.5 cursor-pointer"
+            >
+              <Check className="w-4 h-4" />
+              <span>Salvar Textos</span>
+            </button>
+          </div>
+        </div>
+
+        {saveTextsSuccessMsg && (
+          <div className="p-3.5 rounded-xl bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-xs font-semibold flex items-center gap-2 animate-in fade-in">
+            <CheckCircle2 className="w-4 h-4 shrink-0" />
+            <span>{saveTextsSuccessMsg}</span>
+          </div>
+        )}
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+          {/* Subtitle Input */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <label className="block text-xs font-bold text-slate-300">
+                Subtítulo do Cabeçalho dos Planos
+              </label>
+              <span className="text-[10px] text-amber-400 font-semibold">Topo do modal</span>
+            </div>
+            <textarea
+              rows={3}
+              value={plansSubtitle}
+              onChange={(e) => setPlansSubtitle(e.target.value)}
+              placeholder="Ex: Economize até 50% em relação a cortes avulsos, tenha prioridade na agenda e pague com segurança no cartão ou PIX."
+              className="w-full bg-slate-900 border border-slate-800 rounded-xl p-3 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-500 resize-none leading-relaxed"
+            />
+            <p className="text-[11px] text-slate-500">
+              Frase exibida logo abaixo do título <em>"Visual Impecável O Ano Todo"</em>.
+            </p>
+          </div>
+
+          {/* Guarantee Banner Input */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <label className="block text-xs font-bold text-slate-300">
+                Texto do Banner de Garantia & Segurança
+              </label>
+              <span className="text-[10px] text-emerald-400 font-semibold">Rodapé do modal</span>
+            </div>
+            <textarea
+              rows={3}
+              value={guaranteeBannerText}
+              onChange={(e) => setGuaranteeBannerText(e.target.value)}
+              placeholder="Ex: Cobrança recorrente no Cartão de Crédito ou PIX com segurança garantida. Sem fidelidade, cancele quando desejar."
+              className="w-full bg-slate-900 border border-slate-800 rounded-xl p-3 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-500 resize-none leading-relaxed"
+            />
+            <p className="text-[11px] text-slate-500">
+              Frase exibida dentro da caixa com ícone de escudo verde ao final dos planos.
+            </p>
+          </div>
+        </div>
+
+        {/* Live Preview Box */}
+        <div className="pt-2 border-t border-slate-800/80">
+          <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2.5 flex items-center gap-1.5">
+            <Eye className="w-3.5 h-3.5 text-amber-400" />
+            <span>Pré-visualização como o Cliente Vê no Modal</span>
+          </div>
+
+          <div className="p-4 rounded-2xl bg-slate-950/70 border border-slate-800 space-y-4">
+            {/* Header preview */}
+            <div className="text-center py-2">
+              <div className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-400 text-[10px] font-bold mb-1">
+                <Crown className="w-3 h-3" />
+                Clube de Assinatura Lucas Hoffmann
+              </div>
+              <h4 className="text-base font-extrabold text-white">Visual Impecável O Ano Todo</h4>
+              <p className="text-xs text-slate-400 mt-1 max-w-lg mx-auto leading-relaxed">
+                {plansSubtitle || (
+                  <span className="italic text-slate-600">Nenhum subtítulo definido</span>
+                )}
+              </p>
+            </div>
+
+            {/* Banner preview */}
+            <div className="p-3 rounded-xl bg-slate-900 border border-slate-800 flex items-center justify-center gap-2.5 text-xs text-slate-300 text-center">
+              <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
+              <span>
+                {guaranteeBannerText || (
+                  <span className="italic text-slate-600">Nenhum texto de garantia definido</span>
+                )}
+              </span>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -1145,7 +1314,7 @@ export const AdminSubscriptionsView: React.FC = () => {
                     <div className="flex items-center justify-between mb-1">
                       <span className="text-[11px] font-bold text-slate-400 flex items-center gap-1">
                         <CreditCard className="w-3.5 h-3.5 text-emerald-400" />
-                        Link InfinitePay do Plano:
+                        Link de Pagamento do Plano:
                       </span>
                       {plan.infinitePayUrl ? (
                         <span className="text-[10px] text-emerald-400 font-semibold">Exclusivo</span>
@@ -1180,7 +1349,7 @@ export const AdminSubscriptionsView: React.FC = () => {
                           <span className="text-slate-600">•</span>
                           <button
                             type="button"
-                            onClick={() => setQrModal({ title: `Link InfinitePay - ${plan.name}`, url: effectivePaymentUrl })}
+                            onClick={() => setQrModal({ title: `Link de Pagamento - ${plan.name}`, url: effectivePaymentUrl })}
                             className="flex items-center gap-1 text-[11px] text-slate-400 hover:text-emerald-400 transition"
                           >
                             <QrCode className="w-3 h-3" />
@@ -1380,7 +1549,7 @@ export const AdminSubscriptionsView: React.FC = () => {
                   {isCreating ? 'Criar Novo Plano de Assinatura' : 'Editar Plano de Assinatura'}
                 </h3>
                 <p className="text-xs text-slate-400">
-                  Configure as regras, valor mensal e o link de pagamento InfinitePay.
+                  Configure as regras, valor mensal e o link de pagamento seguro.
                 </p>
               </div>
             </div>
@@ -1581,7 +1750,7 @@ export const AdminSubscriptionsView: React.FC = () => {
                 <label className="block font-bold text-slate-300 mb-1 flex items-center justify-between">
                   <span className="flex items-center gap-1.5">
                     <CreditCard className="w-3.5 h-3.5 text-emerald-400" />
-                    Link Específico InfinitePay para este Plano (Opcional)
+                    Link Específico de Pagamento para este Plano (Opcional)
                   </span>
                   <span className="text-[10px] text-slate-500 font-normal">
                     Se vazio, usará o link padrão da barbearia
@@ -1665,14 +1834,14 @@ export const AdminSubscriptionsView: React.FC = () => {
 
             <h3 className="text-base font-bold text-white">{qrModal.title}</h3>
             <p className="text-xs text-slate-400 mt-1 mb-4">
-              Escaneie com a câmera do celular ou app da InfinitePay para pagar via cartão.
+              Escaneie com a câmera do celular ou app do seu banco para pagar com segurança via cartão ou PIX.
             </p>
 
             {/* Generated QR Code via Google Chart / QR Server API */}
             <div className="bg-white p-4 rounded-2xl inline-block shadow-lg mx-auto mb-4 border-4 border-emerald-500/20">
               <img
                 src={`https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(qrModal.url)}`}
-                alt="QR Code de Pagamento InfinitePay"
+                alt="QR Code de Pagamento Seguro"
                 className="w-44 h-44 mx-auto"
               />
             </div>

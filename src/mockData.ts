@@ -24,8 +24,10 @@ export const INITIAL_INFINITEPAY_CONFIG: InfinitePayConfig = {
   merchantName: 'Lucas Hoffmann Barber',
   defaultUrl: 'https://pay.infinitepay.io/lucashoffmannbarber',
   enabled: true,
-  notes: 'Pagamento via Cartão de Crédito ou Débito com a segurança e aprovação imediata da InfinitePay.',
+  notes: 'Pagamento via Cartão de Crédito, Débito ou PIX com segurança e aprovação imediata online.',
   serverWebhookUrl: 'https://ais-pre-pov473yuxfbnsvikwv5lt2-381752577235.us-east5.run.app/api/webhooks/infinitepay',
+  plansSubtitle: 'Economize até 50% em relação a cortes avulsos, tenha prioridade na agenda e pague com segurança no cartão ou PIX.',
+  guaranteeBannerText: 'Cobrança recorrente no Cartão de Crédito ou PIX com segurança garantida. Sem fidelidade, cancele quando desejar.',
 };
 
 export const INITIAL_SERVICES: BarberService[] = [

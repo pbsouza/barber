@@ -62,7 +62,7 @@ export const AdminDashboard: React.FC = () => {
                 </span>
                 <span className="text-[11px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 flex items-center gap-1">
                   <Database className="w-3 h-3" />
-                  {isFirebaseConnected ? 'Firebase Firestore Conectado' : 'Modo Offline'}
+                  {isFirebaseConnected ? 'Sincronização em Nuvem Ativa' : 'Modo Offline'}
                 </span>
               </div>
               <h1 className="text-2xl sm:text-3xl font-extrabold text-white mt-1 tracking-tight font-['Cabinet_Grotesk',sans-serif]">
