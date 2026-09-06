@@ -144,6 +144,7 @@ interface AppContextType {
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 const SESSION_MAX_DURATION = 300; // 5 minutes in seconds
+const SESSION_STORAGE_EXPIRES_KEY = 'barber_session_expires_at';
 const CLEAN_STORAGE_KEY = 'barber_clean_firebase_v3';
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -162,7 +163,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [currentUser, setCurrentUser] = useState<User | null>(() => {
     try {
       const saved = localStorage.getItem('barber_current_user');
-      return saved ? JSON.parse(saved) : null;
+      if (!saved) return null;
+
+      // Valida se a sessão de 5 minutos já expirou no relógio real antes de restaurar o usuário
+      const expiresAtStr = localStorage.getItem(SESSION_STORAGE_EXPIRES_KEY);
+      if (expiresAtStr) {
+        const expiresAt = parseInt(expiresAtStr, 10);
+        if (!isNaN(expiresAt) && Date.now() >= expiresAt) {
+          localStorage.removeItem('barber_current_user');
+          localStorage.removeItem(SESSION_STORAGE_EXPIRES_KEY);
+          return null;
+        }
+      }
+      return JSON.parse(saved);
     } catch {
       return null;
     }
@@ -287,8 +300,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [authModalMode, setAuthModalMode] = useState<'LOGIN' | 'REGISTER'>('LOGIN');
   const [isSubscriptionModalOpen, setIsSubscriptionModalOpen] = useState(false);
 
-  // 5-minute login expiration timer state
-  const [sessionRemainingSeconds, setSessionRemainingSeconds] = useState<number>(SESSION_MAX_DURATION);
+  // 5-minute login expiration timer state: recupera o tempo restante real mesmo após F5 / recarregar a página
+  const [sessionRemainingSeconds, setSessionRemainingSeconds] = useState<number>(() => {
+    try {
+      const savedUser = localStorage.getItem('barber_current_user');
+      if (!savedUser) return SESSION_MAX_DURATION;
+
+      const expiresAtStr = localStorage.getItem(SESSION_STORAGE_EXPIRES_KEY);
+      if (!expiresAtStr) return SESSION_MAX_DURATION;
+
+      const expiresAt = parseInt(expiresAtStr, 10);
+      if (isNaN(expiresAt)) return SESSION_MAX_DURATION;
+
+      const remaining = Math.ceil((expiresAt - Date.now()) / 1000);
+      if (remaining <= 0) return 0;
+      return Math.min(SESSION_MAX_DURATION, remaining);
+    } catch {
+      return SESSION_MAX_DURATION;
+    }
+  });
   const [sessionExpiredModalOpen, setSessionExpiredModalOpen] = useState(false);
 
   // Admin proactive reminder for upcoming bookings
@@ -413,7 +443,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           setCurrentUser((prev) => {
             if (!prev) return null;
             const updated = list.find((u) => u.id === prev.id);
-            return updated ? { ...prev, ...updated } : prev;
+            if (updated) {
+              // Se o Firestore indicar que a sessão já expirou
+              if (updated.sessionExpiresAt && updated.sessionExpiresAt > 0 && Date.now() >= updated.sessionExpiresAt) {
+                setTimeout(() => {
+                  logout();
+                  setSessionExpiredModalOpen(true);
+                }, 0);
+                return null;
+              }
+              return { ...prev, ...updated };
+            }
+            return prev;
           });
         }
       },
@@ -528,34 +569,82 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, []);
 
   const logout = useCallback(() => {
+    try {
+      const savedUserStr = localStorage.getItem('barber_current_user');
+      if (savedUserStr) {
+        const parsed = JSON.parse(savedUserStr);
+        if (parsed?.id) {
+          // Atualiza também no Firestore para invalidar a sessão em nuvem
+          setDoc(
+            doc(db, 'users', parsed.id),
+            { sessionExpiresAt: 0 },
+            { merge: true }
+          ).catch(console.error);
+        }
+      }
+    } catch {
+      // ignore
+    }
     setCurrentUser(null);
     setSessionRemainingSeconds(SESSION_MAX_DURATION);
+    localStorage.removeItem('barber_current_user');
+    localStorage.removeItem(SESSION_STORAGE_EXPIRES_KEY);
     setActiveView('BOOKING');
   }, []);
 
   useEffect(() => {
     if (!currentUser) return;
 
-    // Start 5-minute strict countdown upon authentication
-    setSessionRemainingSeconds(SESSION_MAX_DURATION);
+    // Recupera ou inicializa a expiração real da sessão
+    let expiresAtStr = localStorage.getItem(SESSION_STORAGE_EXPIRES_KEY);
+    let expiresAt = expiresAtStr ? parseInt(expiresAtStr, 10) : NaN;
 
+    if (isNaN(expiresAt) || expiresAt <= 0) {
+      if (currentUser.sessionExpiresAt && currentUser.sessionExpiresAt > Date.now()) {
+        expiresAt = currentUser.sessionExpiresAt;
+      } else {
+        expiresAt = Date.now() + SESSION_MAX_DURATION * 1000;
+        // Grava no Firestore para que a nuvem saiba exatamente o momento de corte
+        setDoc(
+          doc(db, 'users', currentUser.id),
+          { sessionExpiresAt: expiresAt },
+          { merge: true }
+        ).catch(console.error);
+      }
+      localStorage.setItem(SESSION_STORAGE_EXPIRES_KEY, expiresAt.toString());
+    }
+
+    // Calcula tempo restante real imediatamente (mesmo após recarregar a página com F5)
+    const currentDiff = Math.ceil((expiresAt - Date.now()) / 1000);
+    if (currentDiff <= 0) {
+      setSessionRemainingSeconds(0);
+      logout();
+      setSessionExpiredModalOpen(true);
+      return;
+    }
+
+    setSessionRemainingSeconds(Math.min(SESSION_MAX_DURATION, currentDiff));
+
+    // Contador sincronizado com o relógio real (Date.now()), imune a suspensão de abas ou F5
     const interval = setInterval(() => {
-      setSessionRemainingSeconds((prev) => {
-        if (prev <= 1) {
-          clearInterval(interval);
-          logout();
-          setSessionExpiredModalOpen(true);
-          return 0;
-        }
-        return prev - 1;
-      });
+      const storedStr = localStorage.getItem(SESSION_STORAGE_EXPIRES_KEY);
+      const targetTime = storedStr ? parseInt(storedStr, 10) : expiresAt;
+      const remaining = Math.ceil((targetTime - Date.now()) / 1000);
+
+      if (remaining <= 0) {
+        clearInterval(interval);
+        setSessionRemainingSeconds(0);
+        logout();
+        setSessionExpiredModalOpen(true);
+      } else {
+        setSessionRemainingSeconds(remaining);
+      }
     }, 1000);
 
-    // No activity listeners: the 5-minute session is non-renewable
     return () => {
       clearInterval(interval);
     };
-  }, [currentUser, logout]);
+  }, [currentUser?.id, logout]);
 
   // Proactive Admin reminder check
   useEffect(() => {
@@ -622,7 +711,28 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setDoc(doc(db, 'users', matchedUser.id), matchedUser, { merge: true }).catch(console.error);
       }
 
-      setCurrentUser(matchedUser);
+      const now = Date.now();
+      const sessionExpiresAt = now + SESSION_MAX_DURATION * 1000;
+      localStorage.setItem(SESSION_STORAGE_EXPIRES_KEY, sessionExpiresAt.toString());
+
+      const userWithSession: User = {
+        ...matchedUser,
+        lastLoginAt: new Date(now).toISOString(),
+        sessionExpiresAt,
+      };
+
+      // Persiste no Firebase Firestore para controle centralizado da sessão
+      setDoc(
+        doc(db, 'users', matchedUser.id),
+        {
+          lastLoginAt: new Date(now).toISOString(),
+          sessionExpiresAt,
+        },
+        { merge: true }
+      ).catch(console.error);
+
+      setUsers((prev) => prev.map((u) => (u.id === matchedUser!.id ? userWithSession : u)));
+      setCurrentUser(userWithSession);
       setSessionRemainingSeconds(SESSION_MAX_DURATION);
       setIsAuthModalOpen(false);
 

@@ -17,6 +17,8 @@ export interface User {
   pendingPlanId?: string;
   pendingOrderNsu?: string;
   lastCheckoutAt?: string;
+  lastLoginAt?: string;
+  sessionExpiresAt?: number; // Timestamp em milissegundos gravado no Firestore para expiração após 5 minutos
   createdAt: string;
 }
 
